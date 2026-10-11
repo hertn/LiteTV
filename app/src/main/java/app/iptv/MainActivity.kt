@@ -56,6 +56,9 @@ fun blend(a: Int, b: Int, f: Float): Int {
     return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
 }
 
+// tvg-id matching: "YleTV1.fi@SD" -> "yletv1fi" (drops everything from @, ignores case, dots, spaces, dashes)
+fun normId(s: String): String = s.substringBefore('@').lowercase().filter { it.isLetterOrDigit() }
+
 val THEMES = listOf(
     Theme("LiteTV Purple", 0xFF990AE3.toInt(), 0xFF130C1A.toInt(), 0xFF2F2B3C.toInt(), 0xFF20152D.toInt(), 0xFFD9B8F0.toInt(), 0xFF3A0057.toInt()),
     Theme("Ocean Blue", 0xFF0A84E3.toInt(), 0xFF0A1420.toInt(), 0xFF26323F.toInt(), 0xFF102235.toInt(), 0xFFB8D9F0.toInt(), 0xFF00315A.toInt()),
@@ -269,7 +272,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val shift = if (panels) (if (sideLvl >= 2) pw else 0f) + cw + 8 * d else gx   // lists move right when panels open, nothing overlaps
         when (mode) {
             1 -> { c.save(); c.translate(shift, 0f); drawChannels(c, w - gx, h); c.restore() }
-            2 -> { c.save(); c.translate(shift, 0f); drawGuide(c, w - gx, h); c.restore() }
+            2 -> { val g2 = if (panels) gx else 2f; c.save(); c.translate(if (panels) shift else g2, 0f); drawGuide(c, w - g2, h); c.restore() }   // guide sits 2px from the screen edge (same gap as between channel rows)
             3 -> drawMenu(c, w, h)
             4 -> { c.save(); c.translate(gx, 0f); drawSub(c, w - gx, h); c.restore(); postInvalidateDelayed(700) }
             5 -> drawInfo(c, w, h)
@@ -952,7 +955,7 @@ class MainActivity : Activity() {
         val t = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
         return listOf(t, t + 86400000L)
     }
-    fun dayProgs(ch: Ch, day: Long): List<Prog> = (epg[ch.id] ?: emptyList<Prog>()).filter { it.stop > day && it.start < day + 86400000L }
+    fun dayProgs(ch: Ch, day: Long): List<Prog> = (epg[normId(ch.id)] ?: emptyList<Prog>()).filter { it.stop > day && it.start < day + 86400000L }
 
     // options bar next to a channel / program
     fun chOptions(c: Ch) = listOf("Watch", "Program info", "Channel guide", "Channel settings",
@@ -1084,8 +1087,8 @@ class MainActivity : Activity() {
         }
     }
 
-    fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return epg[c.id]?.firstOrNull { t >= it.start && t < it.stop } }
-    fun next(c: Ch): Prog? { val n = now(c) ?: return null; return epg[c.id]?.firstOrNull { it.start >= n.stop } }
+    fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return epg[normId(c.id)]?.firstOrNull { t >= it.start && t < it.stop } }
+    fun next(c: Ch): Prog? { val n = now(c) ?: return null; return epg[normId(c.id)]?.firstOrNull { it.start >= n.stop } }
 
     fun play(c: Ch) {
         if (cur != null && cur != c) prev = cur
@@ -1143,7 +1146,7 @@ class MainActivity : Activity() {
 
     fun ts(s: String): Long { val d = s.trim(); return (if (d.length > 14) fmtZ.parse(d) else fmt.parse(d))!!.time }
 
-    // reads one EPG file into a map (channel id -> programmes) for today + tomorrow
+    // reads one EPG file into a map (normalized channel id -> programmes) for today + tomorrow
     fun parseEpgFile(f: File): HashMap<String, MutableList<Prog>> {
         val m = HashMap<String, MutableList<Prog>>(); val now = System.currentTimeMillis()
         val lo = days()[0]; val hi = lo + 2 * 86400000L
@@ -1163,7 +1166,7 @@ class MainActivity : Activity() {
                         "desc" -> if (ch.isNotEmpty() && s < now + 12 * 3600_000L && e > now - 3600_000L) de = p.nextText().take(400)
                     }
                 } else if (ev == XmlPullParser.END_TAG && p.name == "programme" && ch.isNotEmpty()) {
-                    if (e > lo && s < hi) m.getOrPut(ch) { ArrayList() }.add(Prog(s, e, ti, de)); ch = ""
+                    if (e > lo && s < hi) m.getOrPut(normId(ch)) { ArrayList() }.add(Prog(s, e, ti, de)); ch = ""
                 }
                 ev = p.next()
             }
