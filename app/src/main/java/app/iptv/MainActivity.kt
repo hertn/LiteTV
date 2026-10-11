@@ -1,3 +1,5 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package app.iptv
 
 import android.app.Activity
@@ -805,7 +807,7 @@ class MainActivity : Activity() {
     // the guide of all playlists together (used by search results and favorites)
     fun mergedEpg(): HashMap<String, MutableList<Prog>> {
         val all = HashMap<String, MutableList<Prog>>()
-        for (src in sources.toList()) for ((k, v) in epgMapFor(src)) all.putIfAbsent(k, v)
+        for (src in sources.toList()) for ((k, v) in epgMapFor(src)) if (!all.containsKey(k)) all[k] = v
         return all
     }
 
