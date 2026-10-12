@@ -61,6 +61,69 @@ fun blend(a: Int, b: Int, f: Float): Int {
 // tvg-id matching: "YleTV1.fi@SD" -> "yletv1fi" (drops everything from @, ignores case, dots, spaces, dashes)
 fun normId(s: String): String = s.substringBefore('@').lowercase().filter { it.isLetterOrDigit() }
 
+// ---- seasonal decorations: picked from the date, moving holidays (Easter, Thanksgiving, Advent) are calculated ----
+const val SE_PARTY = 1; const val SE_HEART = 2; const val SE_FLAG_EE = 3; const val SE_BUN = 4; const val SE_WILLOW = 5; const val SE_EGG = 6
+const val SE_VAPPU = 7; const val SE_WREATH = 8; const val SE_FIREWORK = 9; const val SE_CORNFLOWER = 10; const val SE_LEAF = 11; const val SE_CAKE = 12
+const val SE_PUMPKIN = 13; const val SE_BAT = 14; const val SE_ACORN = 15; const val SE_TURKEY = 16; const val SE_FLAG_FI = 17
+const val SE_HAT = 18; const val SE_HAT_GIFT = 19
+const val SE_CANDLES = 21   // 21..24 = Advent wreath with 1..4 candles lit
+
+fun doyOf(y: Int, m: Int, d: Int): Int = java.util.GregorianCalendar(y, m - 1, d).get(java.util.Calendar.DAY_OF_YEAR)
+
+// Easter Sunday (Gregorian), as day of the year
+fun easterDoy(y: Int): Int {
+    val a = y % 19; val b = y / 100; val c = y % 100; val d = b / 4; val e = b % 4
+    val f = (b + 8) / 25; val g = (b - f + 1) / 3; val h = (19 * a + b - d - g + 15) % 30
+    val i = c / 4; val k = c % 4; val l = (32 + 2 * e + 2 * i - h - k) % 7
+    val m = (a + 11 * h + 22 * l) / 451
+    val month = (h + l - 7 * m + 114) / 31; val day = (h + l - 7 * m + 114) % 31 + 1
+    return doyOf(y, month, day)
+}
+
+// US Thanksgiving = 4th Thursday of November
+fun thanksDoy(y: Int): Int {
+    val first = java.util.GregorianCalendar(y, 10, 1).get(java.util.Calendar.DAY_OF_WEEK)   // SUNDAY = 1, THURSDAY = 5
+    return doyOf(y, 11, 1 + (5 - first + 7) % 7 + 21)
+}
+
+// 4th Advent = the last Sunday on or before Dec 24 (it is Dec 24 itself only when Dec 24 is a Sunday)
+fun advent4Doy(y: Int): Int {
+    val w = java.util.GregorianCalendar(y, 11, 24).get(java.util.Calendar.DAY_OF_WEEK)
+    return doyOf(y, 12, 24) - (w - 1)
+}
+
+fun seasonId(t: Long): Int {
+    val c = java.util.Calendar.getInstance(); c.timeInMillis = t
+    val y = c.get(java.util.Calendar.YEAR); val m = c.get(java.util.Calendar.MONTH) + 1
+    val d = c.get(java.util.Calendar.DAY_OF_MONTH); val n = c.get(java.util.Calendar.DAY_OF_YEAR)
+    // special days first: they replace the month's icon for that one day only
+    if ((m == 1 && d == 1) || (m == 12 && d == 31)) return SE_PARTY
+    if (m == 2 && d == 14) return SE_HEART
+    if (m == 2 && d == 24) return SE_FLAG_EE        // Estonian Independence Day
+    if (m == 5 && d == 1) return SE_VAPPU
+    if (m == 6 && (d == 23 || d == 24)) return SE_WREATH
+    if (m == 7 && d == 4) return SE_FIREWORK
+    if (m == 8 && d == 20) return SE_CORNFLOWER     // Estonian Day of Restoration of Independence
+    if (m == 10 && d == 18) return SE_CAKE          // birthday
+    if (m == 10 && d == 31) return SE_BAT
+    if (m == 12 && d == 6) return SE_FLAG_FI        // Finnish Independence Day
+    if (m == 12 && d in 24..26) return SE_HAT_GIFT
+    val es = easterDoy(y)
+    if (n == es - 47) return SE_BUN                 // Vastlapaev
+    if (n == es - 7) return SE_WILLOW               // Palm Sunday
+    if (n in es - 2..es + 1) return SE_EGG          // Good Friday - Easter Monday
+    val tg = thanksDoy(y)
+    if (n in tg - 3..tg + 1) return SE_TURKEY       // Thanksgiving week, Monday - Friday
+    val a4 = advent4Doy(y)
+    for (k in 0..3) if (n == a4 - 7 * (3 - k)) return SE_CANDLES + k   // the four Advent Sundays
+    // the month's own icon
+    if (m == 12) return SE_HAT
+    if (m == 11) return SE_ACORN
+    if (m == 10) return if (d >= 15) SE_PUMPKIN else SE_LEAF
+    if (m == 9) return SE_LEAF
+    return 0
+}
+
 val THEMES = listOf(
     Theme("LiteTV Purple", 0xFF990AE3.toInt(), 0xFF130C1A.toInt(), 0xFF2F2B3C.toInt(), 0xFF20152D.toInt(), 0xFFD9B8F0.toInt(), 0xFF3A0057.toInt()),
     Theme("Ocean Blue", 0xFF0A84E3.toInt(), 0xFF0A1420.toInt(), 0xFF26323F.toInt(), 0xFF102235.toInt(), 0xFFB8D9F0.toInt(), 0xFF00315A.toInt()),
@@ -145,7 +208,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val SEL: Int get() = C_SEL
     val PROG: Int get() = C_PROG
     val TILE: Int get() = C_TILE
-    val CHIP: Int get() = C_CHIP
+    val CHIP = 0xFF000000.toInt()   // time / date / playlist bar is always black, whatever the theme
     val PAST: Int get() = C_PAST
     val INFO: Int get() = C_INFO
     val GRAY = 0xFFB8BECC.toInt()
@@ -306,6 +369,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val now = System.currentTimeMillis()
         chips(c, listOf(a.hm.format(now), a.dm.format(now), a.sources.getOrNull(a.act)?.name ?: ""), lw + 8 * d, false)
         chips(c, listOf(a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"), w - 8 * d, true)
+        a.season().let { if (it != 0 && a.shown.isNotEmpty()) deco(c, it, -rh * 0.14f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
 
     fun cell(c: Canvas, x: Float, y: Float, w: Float, h: Float, selected: Boolean, focused: Boolean, bg: Int = ROW) {
@@ -328,9 +392,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 cell(c, dw, y, cw, rh, false, false); fill(c, dw, y, cw - 2, rh - 2, LOGOBG); drawLogo(c, cc, dw, y, cw, rh)
                 if (on && col == 1) border(c, dw, y, cw - 2, rh - 2)   // after the logo, otherwise the logo background paints over it
             }
-            dp.getOrNull(progI + (s - S))?.let { pr ->   // programmes run top to bottom in time order: past above, upcoming below
-                cell(c, px, y, pw, rh, false, false, if (pr.stop <= now) PAST else PROG)   // finished shows use the grey of the options bar; selection is shown by the border only
-                if (on && col == 2 && !bar) border(c, px, y, pw - 2, rh - 2)
+            dp.getOrNull(progI - (s - S))?.let { pr ->   // upcoming shows above the selected one, finished shows below it
+                cell(c, px, y, pw, rh, false, false, if (pr.start > now) PAST else PROG)   // upcoming shows use the lighter grey; current and finished shows use the dark panel colour; selection is shown by the border only
+                if (on && col == 2) border(c, px, y, pw - 2, rh - 2)
                 txt(c, a.hm.format(pr.start), px + 14 * d, y + rh * 0.58f, 70 * d, 20f, -1, true)
                 stxt(c, pr.title, px + 84 * d, y + rh * 0.52f, pw - 94 * d, 17f, -1, true, on && col == 2)
                 if (now >= pr.start && now < pr.stop) progress(c, px + 84 * d, y + rh * 0.74f, pw - 100 * d, pr)
@@ -349,8 +413,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 c.save(); c.clipRect(bx, by + 56 * d, bx + bw, by + bh - 10 * d); c.translate(bx + 24 * d, by + 62 * d); sl.draw(c); c.restore()
             }
         }
-        if (ch != null) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch))
+        if (ch != null && col == 2) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch))   // only once the programme column is selected
         chips(c, listOf(a.hm.format(now), a.dm.format(now), a.sources.getOrNull(a.act)?.name ?: ""), bx, false)
+        val sx = when (col) { 0 -> 0f; 1 -> dw; else -> px }   // the column the selector border is on
+        a.season().let { if (it != 0 && ch != null) deco(c, it, if (sx > 0f) sx - rh * 0.1f else 0f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
 
     // "Channel settings": audio / subtitles / aspect tiles; OK on a tile pops its options up above it
@@ -373,6 +439,153 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
             x += tw
         }
+    }
+
+    // seasonal decoration on the selector corner: every shape is drawn in a 0..1 box scaled to s
+    fun deco(c: Canvas, id: Int, x: Float, y: Float, s: Float) {
+        c.save()
+        if (id < SE_CANDLES) c.rotate(-12f, x + s / 2, y + s / 2)
+        p.style = Paint.Style.FILL; p.strokeCap = Paint.Cap.ROUND
+        fun clr(v: Int) { p.color = v }
+        fun rect(l: Float, t: Float, r: Float, b: Float) = c.drawRect(x + l * s, y + t * s, x + r * s, y + b * s, p)
+        fun rr(l: Float, t: Float, r: Float, b: Float, rad: Float) = c.drawRoundRect(RectF(x + l * s, y + t * s, x + r * s, y + b * s), rad * s, rad * s, p)
+        fun ov(l: Float, t: Float, r: Float, b: Float) = c.drawOval(RectF(x + l * s, y + t * s, x + r * s, y + b * s), p)
+        fun dot(cx: Float, cy: Float, r: Float) = c.drawCircle(x + cx * s, y + cy * s, r * s, p)
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float, w: Float) {
+            p.style = Paint.Style.STROKE; p.strokeWidth = w * s
+            c.drawLine(x + x1 * s, y + y1 * s, x + x2 * s, y + y2 * s, p); p.style = Paint.Style.FILL
+        }
+        fun ring(cx: Float, cy: Float, r: Float, w: Float) {
+            p.style = Paint.Style.STROKE; p.strokeWidth = w * s; c.drawCircle(x + cx * s, y + cy * s, r * s, p); p.style = Paint.Style.FILL
+        }
+        fun poly(vararg v: Float) {
+            val q = Path(); q.moveTo(x + v[0] * s, y + v[1] * s)
+            var i = 2; while (i < v.size) { q.lineTo(x + v[i] * s, y + v[i + 1] * s); i += 2 }
+            q.close(); c.drawPath(q, p)
+        }
+        when (id) {
+            SE_PARTY -> {
+                clr(0xFFE91E8C.toInt()); poly(0.2f, 0.88f, 0.8f, 0.88f, 0.5f, 0.12f)
+                clr(-1); line(0.31f, 0.64f, 0.69f, 0.64f, 0.06f); line(0.39f, 0.44f, 0.61f, 0.44f, 0.06f)
+                clr(0xFFFFD54F.toInt()); dot(0.5f, 0.12f, 0.09f)
+                clr(0xFF4FC3F7.toInt()); dot(0.12f, 0.34f, 0.04f); dot(0.9f, 0.52f, 0.04f)
+            }
+            SE_HEART -> { clr(0xFFE53950.toInt()); dot(0.35f, 0.36f, 0.22f); dot(0.65f, 0.36f, 0.22f); poly(0.14f, 0.46f, 0.86f, 0.46f, 0.5f, 0.9f) }
+            SE_FLAG_EE -> {
+                clr(0xFFB0B0B0.toInt()); rect(0.14f, 0.08f, 0.2f, 0.96f)
+                clr(0xFF0072CE.toInt()); rect(0.2f, 0.14f, 0.92f, 0.3f)
+                clr(0xFF000000.toInt()); rect(0.2f, 0.3f, 0.92f, 0.46f)
+                clr(-1); rect(0.2f, 0.46f, 0.92f, 0.62f)
+            }
+            SE_BUN -> {
+                clr(0xFFDDA25A.toInt()); ov(0.1f, 0.55f, 0.9f, 0.9f)
+                clr(-1); ov(0.16f, 0.43f, 0.84f, 0.67f)
+                clr(0xFFE8B96A.toInt()); ov(0.14f, 0.18f, 0.86f, 0.56f)
+                clr(-1); dot(0.4f, 0.3f, 0.03f); dot(0.6f, 0.34f, 0.03f); dot(0.5f, 0.25f, 0.025f)
+            }
+            SE_WILLOW -> {
+                clr(0xFF8D6E63.toInt()); line(0.22f, 0.96f, 0.72f, 0.1f, 0.05f); line(0.36f, 0.76f, 0.14f, 0.4f, 0.04f)
+                clr(0xFFE6E0D4.toInt()); dot(0.38f, 0.7f, 0.07f); dot(0.48f, 0.52f, 0.07f); dot(0.58f, 0.34f, 0.07f); dot(0.68f, 0.17f, 0.06f)
+                dot(0.26f, 0.6f, 0.06f); dot(0.18f, 0.47f, 0.055f)
+            }
+            SE_EGG -> {
+                clr(0xFFF48FB1.toInt()); ov(0.24f, 0.1f, 0.76f, 0.92f)
+                clr(0xFF4FC3F7.toInt()); rect(0.27f, 0.46f, 0.73f, 0.58f)
+                clr(-1); dot(0.5f, 0.3f, 0.05f); dot(0.5f, 0.74f, 0.05f)
+            }
+            SE_VAPPU -> {
+                clr(-1); rr(0.14f, 0.22f, 0.86f, 0.6f, 0.15f)
+                clr(0xFF3A3A3A.toInt()); rect(0.12f, 0.58f, 0.88f, 0.7f); ov(0.22f, 0.66f, 0.78f, 0.86f)
+                clr(0xFFFFD54F.toInt()); dot(0.5f, 0.64f, 0.045f)
+            }
+            SE_WREATH -> {
+                clr(0xFF3E8E41.toInt()); ring(0.5f, 0.55f, 0.3f, 0.1f)
+                val fc = intArrayOf(0xFFFFD54F.toInt(), -1, 0xFF5C9DFF.toInt())
+                for (k in 0 until 8) { val an = k * Math.PI / 4; clr(fc[k % 3]); dot(0.5f + (0.3 * Math.cos(an)).toFloat(), 0.55f + (0.3 * Math.sin(an)).toFloat(), 0.085f) }
+            }
+            SE_FIREWORK -> {
+                val fc = intArrayOf(0xFFE53935.toInt(), -1, 0xFF42A5F5.toInt())
+                for (k in 0 until 8) {
+                    val an = k * Math.PI / 4; clr(fc[k % 3])
+                    line(0.5f + (0.14 * Math.cos(an)).toFloat(), 0.5f + (0.14 * Math.sin(an)).toFloat(), 0.5f + (0.43 * Math.cos(an)).toFloat(), 0.5f + (0.43 * Math.sin(an)).toFloat(), 0.07f)
+                }
+                clr(0xFFFFD54F.toInt()); dot(0.5f, 0.5f, 0.07f)
+            }
+            SE_CORNFLOWER -> {
+                clr(0xFF4CAF50.toInt()); line(0.5f, 0.6f, 0.5f, 0.97f, 0.05f); poly(0.5f, 0.86f, 0.74f, 0.72f, 0.57f, 0.92f)
+                clr(0xFF3D7EE8.toInt())
+                for (k in 0 until 8) { val an = k * Math.PI / 4; dot(0.5f + (0.24 * Math.cos(an)).toFloat(), 0.4f + (0.24 * Math.sin(an)).toFloat(), 0.12f) }
+                clr(0xFF2A2F7A.toInt()); dot(0.5f, 0.4f, 0.09f)
+            }
+            SE_LEAF -> {
+                clr(0xFFD2481E.toInt())
+                poly(0.50f, 0.05f, 0.57f, 0.24f, 0.72f, 0.17f, 0.69f, 0.42f, 0.92f, 0.36f, 0.80f, 0.56f, 0.90f, 0.70f, 0.57f, 0.68f, 0.55f, 0.88f,
+                    0.45f, 0.88f, 0.43f, 0.68f, 0.10f, 0.70f, 0.20f, 0.56f, 0.08f, 0.36f, 0.31f, 0.42f, 0.28f, 0.17f, 0.43f, 0.24f)
+                clr(0xFF6D4C41.toInt()); line(0.5f, 0.82f, 0.5f, 0.98f, 0.05f)
+                clr(0xFFFFB27A.toInt()); line(0.5f, 0.8f, 0.5f, 0.3f, 0.025f)
+            }
+            SE_CAKE -> {
+                clr(0xFFF48FB1.toInt()); rr(0.14f, 0.5f, 0.86f, 0.9f, 0.08f)
+                clr(-1); rr(0.14f, 0.5f, 0.86f, 0.6f, 0.05f)
+                clr(0xFF64B5F6.toInt()); rect(0.47f, 0.26f, 0.53f, 0.5f)
+                clr(0xFFFFC107.toInt()); ov(0.43f, 0.08f, 0.57f, 0.27f)
+                clr(0xFFFFD54F.toInt()); dot(0.3f, 0.74f, 0.03f); dot(0.5f, 0.78f, 0.03f); dot(0.7f, 0.74f, 0.03f)
+            }
+            SE_PUMPKIN -> {
+                clr(0xFFFF8F1F.toInt()); ov(0.1f, 0.3f, 0.9f, 0.92f)
+                clr(0xFF4C8C2B.toInt()); rr(0.45f, 0.12f, 0.55f, 0.34f, 0.03f)
+                clr(0xFF3B1F00.toInt()); poly(0.28f, 0.5f, 0.42f, 0.5f, 0.35f, 0.62f); poly(0.58f, 0.5f, 0.72f, 0.5f, 0.65f, 0.62f); poly(0.34f, 0.74f, 0.66f, 0.74f, 0.5f, 0.84f)
+            }
+            SE_BAT -> {
+                clr(0xFF7E57C2.toInt()); ov(0.42f, 0.38f, 0.58f, 0.72f)
+                poly(0.43f, 0.4f, 0.45f, 0.26f, 0.5f, 0.38f); poly(0.57f, 0.4f, 0.55f, 0.26f, 0.5f, 0.38f)
+                poly(0.43f, 0.46f, 0.14f, 0.28f, 0.04f, 0.52f, 0.2f, 0.48f, 0.3f, 0.66f, 0.43f, 0.6f)
+                poly(0.57f, 0.46f, 0.86f, 0.28f, 0.96f, 0.52f, 0.8f, 0.48f, 0.7f, 0.66f, 0.57f, 0.6f)
+                clr(0xFFFFEB3B.toInt()); dot(0.46f, 0.5f, 0.025f); dot(0.54f, 0.5f, 0.025f)
+            }
+            SE_ACORN -> {
+                clr(0xFFC68642.toInt()); ov(0.27f, 0.4f, 0.73f, 0.94f)
+                clr(0xFF6D4C41.toInt()); ov(0.2f, 0.2f, 0.8f, 0.55f)
+                clr(0xFF5D4037.toInt()); rect(0.47f, 0.08f, 0.53f, 0.24f)
+            }
+            SE_TURKEY -> {
+                val fc = intArrayOf(0xFFD32F2F.toInt(), 0xFFF57C00.toInt(), 0xFFFBC02D.toInt(), 0xFFF57C00.toInt(), 0xFFD32F2F.toInt())
+                for (k in 0 until 5) { val an = Math.toRadians(-160.0 + k * 35.0); clr(fc[k]); dot(0.5f + (0.3 * Math.cos(an)).toFloat(), 0.52f + (0.3 * Math.sin(an)).toFloat(), 0.14f) }
+                clr(0xFF8D5524.toInt()); dot(0.5f, 0.68f, 0.22f)
+                clr(0xFFB07A4C.toInt()); dot(0.5f, 0.5f, 0.1f)
+                clr(0xFFE53935.toInt()); dot(0.54f, 0.58f, 0.035f)
+                clr(0xFFFFB300.toInt()); poly(0.47f, 0.52f, 0.53f, 0.52f, 0.5f, 0.58f)
+                clr(0xFF000000.toInt()); dot(0.46f, 0.47f, 0.02f); dot(0.54f, 0.47f, 0.02f)
+            }
+            SE_FLAG_FI -> {
+                clr(0xFFB0B0B0.toInt()); rect(0.14f, 0.08f, 0.2f, 0.96f)
+                clr(-1); rect(0.2f, 0.14f, 0.92f, 0.64f)
+                clr(0xFF003580.toInt()); rect(0.2f, 0.33f, 0.92f, 0.45f); rect(0.38f, 0.14f, 0.5f, 0.64f)
+            }
+            SE_HAT, SE_HAT_GIFT -> {
+                val k = if (id == SE_HAT_GIFT) 0.84f else 1f
+                clr(0xFFD6212E.toInt())
+                val q = Path(); q.moveTo(x + 0.12f * k * s, y + 0.78f * k * s); q.lineTo(x + 0.88f * k * s, y + 0.78f * k * s)
+                q.quadTo(x + 0.84f * k * s, y + 0.30f * k * s, x + 0.52f * k * s, y + 0.16f * k * s)
+                q.quadTo(x + 0.30f * k * s, y + 0.28f * k * s, x + 0.12f * k * s, y + 0.78f * k * s); q.close(); c.drawPath(q, p)
+                clr(-1); rr(0.08f * k, 0.70f * k, 0.92f * k, 0.90f * k, 0.09f); dot(0.52f * k, 0.15f * k, 0.1f * k)
+                if (id == SE_HAT_GIFT) {
+                    clr(0xFF2E9E57.toInt()); rect(0.62f, 0.62f, 0.96f, 0.96f)
+                    clr(0xFFFFD54F.toInt()); rect(0.77f, 0.62f, 0.81f, 0.96f); rect(0.62f, 0.77f, 0.96f, 0.81f); dot(0.76f, 0.58f, 0.04f); dot(0.82f, 0.58f, 0.04f)
+                }
+            }
+            else -> if (id >= SE_CANDLES) {   // Advent wreath: 4 candles, the first (id - 20) are lit
+                val lit = id - SE_CANDLES + 1
+                clr(0xFF2E7D32.toInt()); ov(0.06f, 0.68f, 0.94f, 0.94f)
+                for (k in 0 until 4) {
+                    val cx = 0.18f + k * 0.21f
+                    clr(0xFFEDE7D9.toInt()); rect(cx - 0.06f, 0.4f, cx + 0.06f, 0.8f)
+                    if (k < lit) { clr(0xFFFFC107.toInt()); ov(cx - 0.05f, 0.14f, cx + 0.05f, 0.38f); clr(0xFFFF7043.toInt()); ov(cx - 0.025f, 0.24f, cx + 0.025f, 0.38f) }
+                }
+            }
+        }
+        p.style = Paint.Style.FILL; p.strokeCap = Paint.Cap.BUTT
+        c.restore()
     }
 
     // LiteTV logo: rounded square in the accent colour, white "L" with a lavender play triangle (same shapes as the app icon)
@@ -401,6 +614,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 val tx = ex + r * 0.4f * q; val ty = ey - r * 0.4f * q
                 c.drawLine(tx, ty, ex - r * 0.45f * q, ey - r * 0.45f * q, p); c.drawLine(tx, ty, ex + r * 0.45f * q, ey + r * 0.45f * q, p) }
             9 -> { c.drawRoundRect(RectF(cx - r * 0.55f, cy - r, cx + r * 0.55f, cy + r), 3 * d, 3 * d, p); c.drawLine(cx - r * 0.18f, cy + r * 0.68f, cx + r * 0.18f, cy + r * 0.68f, p) }
+            8 -> { c.drawRoundRect(RectF(cx - r * 0.85f, cy - r * 0.1f, cx + r * 0.85f, cy + r * 0.9f), 2 * d, 2 * d, p)   // gift box = seasonal decorations
+                c.drawRect(cx - r, cy - r * 0.5f, cx + r, cy - r * 0.1f, p); c.drawLine(cx, cy - r * 0.5f, cx, cy + r * 0.9f, p)
+                c.drawOval(RectF(cx - r * 0.6f, cy - r * 0.95f, cx, cy - r * 0.5f), p); c.drawOval(RectF(cx, cy - r * 0.95f, cx + r * 0.6f, cy - r * 0.5f), p) }
             10 -> { c.drawCircle(cx, cy, r, p)   // palette: circle with three paint dots
                 p.style = Paint.Style.FILL
                 for (k in 0..2) { val an = -Math.PI / 2 + k * 2 * Math.PI / 3; c.drawCircle(cx + (r * 0.5 * Math.cos(an)).toFloat(), cy + (r * 0.5 * Math.sin(an)).toFloat(), r * 0.17f, p) } }
@@ -474,10 +690,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         txt(c, "Program title", ax + 14 * d, oy + u * 0.56f, aw - 28 * d, 17f, -1, true)
         fill(c, ax + 14 * d, oy + u * 0.72f, aw - 28 * d, 4 * d, TRACK); fill(c, ax + 14 * d, oy + u * 0.72f, (aw - 28 * d) * 0.6f, 4 * d, BAR)
         border(c, ax, oy, aw, u * 0.9f)
-        // finished show
+        // upcoming show (lighter grey)
         val by = oy + u * 1.05f
         fill(c, ax, by, aw, u * 0.7f, PAST)
-        txt(c, "17:30", ax + 14 * d, by + u * 0.46f, 70 * d, 17f, -1, true); txt(c, "Finished show", ax + 84 * d, by + u * 0.46f, aw - 98 * d, 17f, -1, true)
+        txt(c, "17:30", ax + 14 * d, by + u * 0.46f, 70 * d, 17f, -1, true); txt(c, "Upcoming show", ax + 84 * d, by + u * 0.46f, aw - 98 * d, 17f, -1, true)
         // options bar tiles
         val ty = oy + u * 1.9f; val tw = iw * 0.36f
         fill(c, ax, ty, tw - 2, u * 0.7f, PUR); txt(c, "Watch", ax + 14 * d, ty + u * 0.46f, tw - 28 * d, 17f, -1, true)
@@ -558,9 +774,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 up -> if (sideFocus == 2) plSel = (plSel + n - 1) % n else catSel = (catSel + n - 1) % n
                 dn -> if (sideFocus == 2) plSel = (plSel + 1) % n else catSel = (catSel + 1) % n
-                lf -> if (sideFocus == 1 && sideLvl < 2) { sideLvl = 2; sideFocus = 2; plSel = a.act }
+                lf -> if (sideFocus == 1) { sideLvl = 2; sideFocus = 2; plSel = a.act }
                 rt -> if (sideFocus == 2) { sideLvl = 1; sideFocus = 1 } else sideLvl = 0
-                ok -> if (sideFocus == 2) { sideLvl = 0; a.activate(plSel, false) } else { sideLvl = 0; a.selectGroup(catSel) }
+                ok -> if (sideFocus == 2) { a.activate(plSel, false); catSel = 1; sideFocus = 1 } else { sideLvl = 0; a.selectGroup(catSel) }
             }
         } else if (mode == 3) {
             val n = a.menuItems().size
@@ -610,11 +826,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                     when (col) {
                         0 -> { dayI = (dayI + sg).coerceIn(0, dys.lastIndex); progI = defProg() }
                         1 -> { sel = wrap(sel + sg); progI = defProg() }
-                        else -> progI = (progI - sg).coerceIn(0, maxOf(0, dp.size - 1))   // UP = earlier show, DOWN = later show
+                        else -> progI = (progI + (if (up) 1 else -1)).coerceIn(0, maxOf(0, dp.size - 1))   // UP = later show (drawn above), DOWN = earlier show
                     }
                 }
-                lf -> if (bar) { if (oi > 0) oi-- else bar = false } else if (col > 0) col-- else openSide()
-                rt -> if (bar) oi = minOf(oi + 1, a.nOpts - 1) else if (col < 2) col++ else bar = true
+                lf -> if (col == 2 && oi > 0) oi-- else if (col > 0) col-- else openSide()
+                rt -> if (col < 2) col++ else oi = minOf(oi + 1, a.nOpts - 1)
                 ok -> if (ch != null) a.chOption(ch, oi, dp.getOrNull(progI))
             }
         }
@@ -652,6 +868,15 @@ class MainActivity : Activity() {
     // true while the list mixes channels of several playlists (search results, favorites)
     fun multi() = searching || grp == 0
 
+    // today's seasonal decoration (recomputed hourly); the menu switches it On / Off
+    var seasonOn = true; var seasonHour = -1; var seasonCache = 0
+    fun season(): Int {
+        if (!seasonOn) return 0
+        val t = System.currentTimeMillis(); val hr = (t / 3600000L).toInt()
+        if (hr != seasonHour) { seasonHour = hr; seasonCache = seasonId(t) }
+        return seasonCache
+    }
+
     // ---- themes ----
     fun themeOf(i: Int): Theme = if (i < THEMES.size) THEMES[i] else customTheme(cA, cP, cH)
     fun themeNames(): List<String> = THEMES.map { it.name } + "Custom"
@@ -685,6 +910,7 @@ class MainActivity : Activity() {
         super.onCreate(b)
         prefs = getSharedPreferences("p", 0)
         loadTheme()
+        seasonOn = prefs.getBoolean("season", true)
         favs.addAll(prefs.getStringSet("favs", emptySet())!!); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
         root = FrameLayout(this); root.setBackgroundColor(C_BG)
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
@@ -904,7 +1130,7 @@ class MainActivity : Activity() {
     }
 
     fun selectGroup(i: Int, keep: Boolean = false) {
-        searching = false; grp = i.coerceIn(0, groups.lastIndex); val v = vis()
+        searching = false; grp = i.coerceIn(0, groups.lastIndex); prefs.edit().putString("grp", groups[grp]).apply(); val v = vis()
         shown = when (grp) { 0 -> favChannels(); 1 -> v; else -> v.filter { it.group == groups[grp] } }
         if (multi() != wide) { wide = multi(); reloadEpg() }
         ui.reset(keep)
@@ -932,9 +1158,12 @@ class MainActivity : Activity() {
     fun setChannels(c: List<Ch>, boot: Boolean, keepFav: Boolean = false) {
         channels = c
         groups = listOf("★ Favorites", "All") + c.map { it.group }.distinct()
-        selectGroup(if (keepFav && grp == 0) 0 else 1)   // switching playlist because a favorite was played: stay in Favorites
+        val saved = if (boot) groups.indexOf(prefs.getString("grp", "All")) else -1   // remembered category (by name: every playlist has its own)
+        selectGroup(if (saved >= 0) saved else if (keepFav && grp == 0) 0 else 1)   // switching playlist because a favorite was played: stay in Favorites
         val last = if (boot) c.firstOrNull { it.url == prefs.getString("last", null) } else null
-        if (last != null) play(last) else if (boot || ui.mode != 0) ui.open(if (ui.mode == 2) 2 else 1)
+        if (last != null) play(last)
+        else if (ui.side) { ui.catSel = grp; ui.plSel = act; ui.invalidate() }   // playlist picked in the side panels: keep them open
+        else if (boot || ui.mode != 0) ui.open(if (ui.mode == 2) 2 else 1)
     }
 
     fun logoOf(c: Ch): Bitmap? {
@@ -1074,7 +1303,7 @@ class MainActivity : Activity() {
 
     // main menu (OK button); the number is the icon id
     fun menuItems() = listOf(0 to "Search", 9 to "Playlists", 2 to "TV guide", 3 to "On air now", 4 to (if (showHidden) "Hide hidden" else "Show hidden"),
-        10 to "Themes", 6 to "Last channel", 7 to "Reload")
+        10 to "Themes", 8 to (if (seasonOn) "Seasonal: On" else "Seasonal: Off"), 6 to "Last channel", 7 to "Reload")
 
     fun menuAct(i: Int) {
         when (i) {
@@ -1084,8 +1313,9 @@ class MainActivity : Activity() {
             3 -> ui.open(1)
             4 -> { showHidden = !showHidden; selectGroup(grp, true) }
             5 -> ui.openThemes()
-            6 -> { ui.close(); prev?.let { play(it) } }
-            7 -> { ui.close(); activate(act, true) }
+            6 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }   // menu stays open, the key handler redraws it
+            7 -> { ui.close(); prev?.let { play(it) } }
+            8 -> { ui.close(); activate(act, true) }
         }
     }
 
