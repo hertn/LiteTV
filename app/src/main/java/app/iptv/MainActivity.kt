@@ -22,6 +22,8 @@ import android.text.TextPaint
 import android.text.TextUtils
 import androidx.media3.ui.AspectRatioFrameLayout
 import android.content.SharedPreferences
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
 import android.os.Bundle
 import android.util.Xml
 import android.view.*
@@ -175,6 +177,20 @@ data class Src(val id: String, val name: String, val m3u: String)
 data class Epg(val id: String, val name: String, val url: String, val all: Boolean, val srcIds: List<String>, val owner: String = "")
 data class DBtn(val label: String, val color: Int, val act: (android.app.Dialog) -> Unit)
 
+// settings choices: guide refresh (hours, 0 = only by hand) and guide length (days)
+val REFRESH_OPTS = intArrayOf(0, 6, 12, 24, 48)
+val DAYS_OPTS = intArrayOf(2, 3, 5, 7, 10, 14)
+
+// the TV guide lives on disk in this small database (not in RAM): one row per programme
+class EpgDbHelper(ctx: Context) : SQLiteOpenHelper(ctx, "epg.db", null, 1) {
+    override fun onConfigure(db: SQLiteDatabase) { super.onConfigure(db); db.enableWriteAheadLogging() }   // reading never waits for an import
+    override fun onCreate(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE p(src TEXT, ch TEXT, s INTEGER, e INTEGER, t TEXT, d TEXT)")
+        db.execSQL("CREATE INDEX pi ON p(ch, s)")
+    }
+    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) { db.execSQL("DROP TABLE IF EXISTS p"); onCreate(db) }
+}
+
 class Banner(ctx: Context, val a: MainActivity) : View(ctx) {
     init { alpha = UI_ALPHA }
     var ch: Ch? = null
@@ -218,14 +234,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val LAVT: Int get() = T.lavT
     val dd = java.text.SimpleDateFormat("dd.MM"); val wd = java.text.SimpleDateFormat("EEE"); val wdd = java.text.SimpleDateFormat("EEE dd.MM")
     val S = 6; val dir = if (REVERSED) 1 else -1
-    // mode: 0 hidden, 1 channel list, 2 date/channel/program, 3 main menu (OK), 4 channel settings, 5 program info, 6 theme list, 7 custom theme editor
+    // mode: 0 hidden, 1 channel list, 2 date/channel/program, 3 main menu (OK), 4 channel settings, 5 program info, 6 theme list, 7 custom theme editor, 8 settings
     var mode = 0; var sideLvl = 0; var sideFocus = 1; var catSel = 1; var plSel = 0   // sideLvl: 0 none, 1 categories, 2 playlists + categories
     var side: Boolean
         get() = sideLvl > 0
         set(v) { if (!v) sideLvl = 0 }
     var sel = 0; var oi = 0; var bar = false; var col = 1; var dayI = 0; var progI = 0; var menuSel = 0
     var subI = 0; var subOpen = false; var oj = 0
-    var themeSel = 0; var cRow = 0
+    var themeSel = 0; var cRow = 0; var setSel = 0
     var infoCh: Ch? = null; var infoProg: Prog? = null; var backMode = 1
     var selSince = SystemClock.uptimeMillis()
     var menuShader: Shader? = null; var menuShaderW = 0
@@ -320,10 +336,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun openGuide(ch: Ch) { open(2); val k = a.shown.indexOf(ch); if (k >= 0) { sel = k; progI = defProg(); invalidate() } }
     fun openMenu() { menuSel = 0; show(3); invalidate() }
     fun openThemes() { themeSel = a.themeIdx; show(6); invalidate() }
+    fun openSettings() { setSel = 0; show(8); invalidate() }
     fun openSub() { backMode = if (mode == 2) 2 else 1; subI = 0; subOpen = false; show(4); invalidate() }
     fun openInfo(ch: Ch, pr: Prog?) { backMode = if (mode == 2) 2 else 1; infoCh = ch; infoProg = pr; show(5); invalidate() }
     fun close() {
         if (mode == 6) a.setTheme(a.themeIdx, false)   // leaving the theme list without pressing OK: drop the preview
+        a.settingsDone()
         mode = 0; sideLvl = 0; removeCallbacks(idle); visibility = View.GONE; if (a.searching) a.endSearch()
     }
     fun openSide(pl: Boolean = false) {
@@ -342,6 +360,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             4 -> { c.save(); c.translate(gx, 0f); drawSub(c, w - gx, h); c.restore(); postInvalidateDelayed(700) }
             5 -> drawInfo(c, w, h)
             6, 7 -> drawThemes(c, w, h)
+            8 -> drawSettings(c, w, h)
         }
         if (panels) {
             var x = 0f
@@ -379,7 +398,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun drawGuide(c: Canvas, w: Float, h: Float) {
         val rh = rowH(); val dw = w * 0.115f; val cw = w * 0.115f; val px = dw + cw; val pw = w * 0.31f
         val dys = days(); val ch = a.shown.getOrNull(sel); val now = System.currentTimeMillis()
-        val dp = if (ch != null) a.dayProgs(ch, dys[dayI]) else emptyList()
+        val dp = if (ch != null) a.dayProgs(ch, dys[dayI.coerceIn(0, dys.lastIndex)]) else emptyList()
         for (s in 0..7) {
             val y = s * rh; val rel = dir * (S - s); val on = s == S
             dys.getOrNull(dayI + rel)?.let { day ->
@@ -407,9 +426,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val bh = h * 0.27f; val by = S * rh - bh
             fill(c, bx, by, bw, bh, INFO)
             txt(c, pr.title, bx + 24 * d, by + 42 * d, bw - 48 * d, 22f, -1, true)
-            if (pr.desc.isNotEmpty()) {
+            val ds = if (ch != null) a.descOf(ch, pr) else pr.desc
+            if (ds.isNotEmpty()) {
                 tp.textSize = 15 * d; tp.color = 0xFFD5DAE6.toInt(); tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
-                val sl = StaticLayout(pr.desc, tp, (bw - 48 * d).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.15f, 0f, false)
+                val sl = StaticLayout(ds, tp, (bw - 48 * d).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.15f, 0f, false)
                 c.save(); c.clipRect(bx, by + 56 * d, bx + bw, by + bh - 10 * d); c.translate(bx + 24 * d, by + 62 * d); sl.draw(c); c.restore()
             }
         }
@@ -643,6 +663,25 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
     }
 
+    // settings panel (mode 8): one row per setting, LEFT / RIGHT or OK changes it
+    fun drawSettings(c: Canvas, w: Float, h: Float) {
+        val pw = w * 0.42f; val rh = h / 11f
+        fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
+        txt(c, "SETTINGS", 20 * d, rh * 0.62f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
+        val items = a.settingsItems()
+        items.forEachIndexed { i, row ->
+            val y = rh * (i + 1); val on = i == setSel
+            if (on) fill(c, 0f, y, pw - 2, rh - 2, PUR)
+            txt(c, row.first, 20 * d, y + rh * 0.62f, pw * 0.5f, 18f, -1, on)
+            if (row.second.isNotEmpty()) {
+                tp.textSize = 17 * d; tp.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.color = if (on) -1 else GRAY; tp.textAlign = Paint.Align.RIGHT
+                val v = if (on && i in 1..3) "<  ${row.second}  >" else row.second
+                c.drawText(TextUtils.ellipsize(v, tp, pw * 0.45f, TextUtils.TruncateAt.END).toString(), pw - 20 * d, y + rh * 0.62f, tp)
+            }
+        }
+        txt(c, "LEFT / RIGHT  change     OK  select     BACK  close", 20 * d, rh * (items.size + 1.8f), pw - 40 * d, 14f, GRAY)
+    }
+
     // theme list (mode 6) or custom colour editor (mode 7), each with a live preview of the colours
     fun drawThemes(c: Canvas, w: Float, h: Float) {
         val py = h * 0.2f; val pvh = h * 0.62f
@@ -724,9 +763,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             fill(c, tx, h * 0.40f, tw, 34 * d, withAlpha(T.tint, 0xCC)); txt(c, t, tx + 14 * d, h * 0.40f + 24 * d, tw, 16f, -1, true); tx += tw + 10 * d
         }
         if (pr != null) {
-            if (pr.desc.isNotEmpty()) {
+            val ds = a.descOf(ch, pr)
+            if (ds.isNotEmpty()) {
                 tp.textSize = 19 * d; tp.color = -1; tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
-                val sl = StaticLayout(pr.desc, tp, (w * 0.55f).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, false)
+                val sl = StaticLayout(ds, tp, (w * 0.55f).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, false)
                 c.save(); c.clipRect(x, h * 0.48f, x + w * 0.56f, h * 0.70f); c.translate(x, h * 0.48f); sl.draw(c); c.restore()
             }
             txt(c, "On air:  ${wdd.format(pr.start)} / ${a.hm.format(pr.start)}", w * 0.62f, h * 0.58f, w * 0.34f, 19f, -1, true)
@@ -761,7 +801,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 side -> side = false
                 mode == 4 -> { if (subOpen) subOpen = false else mode = backMode }
                 mode == 5 -> mode = backMode
-                mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 3 }   // back to the menu, preview dropped
+                mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 8 }   // back to settings, preview dropped
+                mode == 8 -> { a.settingsDone(); mode = 3 }
                 mode == 7 -> mode = 6                                       // custom colours are already saved
                 else -> close()
             }
@@ -792,6 +833,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
         } else if (mode == 5) {
             if (ok) { val c0 = infoCh; close(); if (c0 != null) a.play(c0) }
+        } else if (mode == 8) {
+            val n = a.settingsItems().size
+            when { up -> setSel = (setSel + n - 1) % n; dn -> setSel = (setSel + 1) % n; lf -> a.settingAct(setSel, -1); rt -> a.settingAct(setSel, 1); ok -> a.settingAct(setSel, 1) }
         } else if (mode == 6) {
             val n = a.themeNames().size   // the last entry is "Custom"
             when {
@@ -819,7 +863,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 ok -> if (ch != null) a.chOption(ch, oi)
             }
         } else {
-            val dys = days(); val dp = if (ch != null) a.dayProgs(ch, dys[dayI]) else emptyList()
+            val dys = days(); val dp = if (ch != null) a.dayProgs(ch, dys[dayI.coerceIn(0, dys.lastIndex)]) else emptyList()
             when {
                 up || dn -> {
                     val sg = if (up) dir else -dir
@@ -846,20 +890,28 @@ class MainActivity : Activity() {
     var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false; val nOpts = 6
     val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false
     var errShown = false
-    var wide = false   // true while `epg` holds the merged guide of all playlists (search results / favorites)
     val arNames = arrayOf("Fit", "Zoom", "Stretch")
     var themeIdx = 0   // saved theme: 0 until THEMES.size - 1 = premade, THEMES.size = Custom
     var cA = 12; var cP = 12; var cH = 12   // custom theme: swatch index of accent / panels / highlight
-    @Volatile var epg = HashMap<String, MutableList<Prog>>()
     val chCache = java.util.concurrent.ConcurrentHashMap<String, List<Ch>>()                              // source id -> channels
-    val epgByUrl = java.util.concurrent.ConcurrentHashMap<String, HashMap<String, MutableList<Prog>>>()   // epg url -> parsed guide (shared between playlists)
-    val epgAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    val epgAt = java.util.concurrent.ConcurrentHashMap<String, Long>()                                    // epg url -> age of the downloaded file that is in the database
     val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
     @Volatile var preloading = false
     fun lk(k: String): Any = locks.getOrPut(k) { Any() }
-    val fmtZ = SimpleDateFormat("yyyyMMddHHmmss Z"); val fmt = SimpleDateFormat("yyyyMMddHHmmss")
     val hm = SimpleDateFormat("HH:mm"); val dm = SimpleDateFormat("EEEE, d MMMM")
-    val logos = android.util.LruCache<String, Bitmap>(80)
+    // logos: capped by size (8 MB), not by count
+    val logos = object : android.util.LruCache<String, Bitmap>(8 * 1024 * 1024) { override fun sizeOf(k: String, b: Bitmap): Int = b.byteCount }
+
+    // ---- guide (EPG) database: only a few channels at a time are ever held in RAM ----
+    val epgDb: SQLiteDatabase by lazy { EpgDbHelper(this).writableDatabase }
+    var epgHours = 12; var epgDaysN = 7; var daysDirty = false   // settings: refresh every N hours (0 = by hand), keep N days
+    @Volatile var scope: List<String> = emptyList()    // which guide files are in view: the active playlist's, or all of them while favorites / search results are shown
+    @Volatile var epgVer = 0                           // goes up whenever the guide data or the scope changes
+    val progCache = android.util.LruCache<String, List<Prog>>(60)   // channel -> its programmes (read from the database on first use)
+    val descCache = android.util.LruCache<String, String>(40)       // descriptions of far-away programmes, read on demand
+    @Volatile var epgBusy = false
+    @Volatile var endCache = 0L; @Volatile var endVer = -1
+    var exiting = false
     val loading: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
     val failed: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
     val pool: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newFixedThreadPool(2)
@@ -910,6 +962,8 @@ class MainActivity : Activity() {
         super.onCreate(b)
         prefs = getSharedPreferences("p", 0)
         loadTheme()
+        epgHours = prefs.getInt("epgH", 12); epgDaysN = prefs.getInt("epgD", 7).coerceIn(1, 30)
+        Thread { try { epgDb.isOpen } catch (e: Exception) {} }.start()   // open the guide database in the background
         seasonOn = prefs.getBoolean("season", true)
         favs.addAll(prefs.getStringSet("favs", emptySet())!!); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
         root = FrameLayout(this); root.setBackgroundColor(C_BG)
@@ -983,6 +1037,9 @@ class MainActivity : Activity() {
         val keep = HashSet<String>()
         for (s in sources) { keep.add("l" + hx(s.m3u)); epgUrls(s).forEach { keep.add("e" + hx(it)) } }
         filesDir.listFiles()?.filter { (it.name.startsWith("l") || it.name.startsWith("e")) && it.name !in keep }?.forEach { it.delete() }
+        // guide rows of guide files that no playlist uses any more
+        val keys = sources.flatMap { epgUrls(it) }.map { hx(it) }.distinct()
+        try { epgDb.execSQL(if (keys.isEmpty()) "DELETE FROM p" else "DELETE FROM p WHERE src NOT IN (" + keys.joinToString(",") { "'$it'" } + ")") } catch (e: Exception) {}
     }
 
     // downloads every url in parallel to its own cache file; failed ones keep their old cache
@@ -1019,48 +1076,145 @@ class MainActivity : Activity() {
         all
     }
 
-    // guide of a playlist = its EPG files merged (a single file is shared, not copied)
-    fun epgMapFor(s: Src): HashMap<String, MutableList<Prog>> {
-        val maps = epgUrls(s).mapNotNull { epgByUrl[it] }
-        if (maps.isEmpty()) return HashMap()
-        if (maps.size == 1) return maps[0]
-        val m = HashMap<String, MutableList<Prog>>()
-        for (x in maps) for ((k, v) in x) m.getOrPut(k) { ArrayList() }.addAll(v)
-        for (k in m.keys.toList()) m[k] = m[k]!!.sortedBy { it.start }.distinctBy { it.start }.toMutableList()
+    // ---- the guide (EPG): downloaded file -> database on disk -> only the channels on screen are read back ----
+
+    fun epgMaxAge(): Long = if (epgHours <= 0) Long.MAX_VALUE else epgHours * 3600_000L
+
+    // the guide files in view: the active playlist's, or every playlist's while favorites / search results are shown
+    fun scopeNow(): List<String> =
+        if (multi()) sources.toList().flatMap { epgUrls(it) }.distinct().map { hx(it) }
+        else (sources.getOrNull(act)?.let { s -> epgUrls(s).map { hx(it) } } ?: emptyList())
+
+    // the guide data or the scope changed: forget what was read, redraw
+    fun epgChanged() {
+        scope = scopeNow(); epgVer++
+        progCache.evictAll(); descCache.evictAll(); ui.postInvalidate()
+    }
+
+    fun syncScope() { if (scopeNow() != scope) epgChanged() }
+
+    // programmes of one channel (all days kept), read from the database the first time and then remembered for a while
+    fun progsOf(c: Ch): List<Prog> {
+        val k = normId(c.id); if (k.isEmpty()) return emptyList()
+        progCache.get(k)?.let { return it }
+        val sc = scope; if (sc.isEmpty()) return emptyList()
+        val v = epgVer; val l = queryProgs(k, sc)
+        if (v == epgVer) progCache.put(k, l)
+        return l
+    }
+
+    // descriptions are only loaded for programmes that are on now or soon; the rest are read when you open them
+    fun queryProgs(k: String, sc: List<String>): List<Prog> {
+        val now = System.currentTimeMillis(); val hi = now + 12 * 3600_000L; val lo = now - 3600_000L
+        val out = ArrayList<Prog>()
+        try {
+            val sql = "SELECT s, e, t, CASE WHEN s < $hi AND e > $lo THEN d ELSE '' END FROM p WHERE ch = ? AND src IN (" + sc.joinToString(",") { "?" } + ") ORDER BY s"
+            epgDb.rawQuery(sql, (listOf(k) + sc).toTypedArray()).use { cur ->
+                while (cur.moveToNext()) out.add(Prog(cur.getLong(0), cur.getLong(1), cur.getString(2) ?: "", cur.getString(3) ?: ""))
+            }
+        } catch (e: Exception) {}
+        return out.distinctBy { it.start }
+    }
+
+    fun descOf(c: Ch, p: Prog): String {
+        if (p.desc.isNotEmpty()) return p.desc
+        val k = normId(c.id) + "|" + p.start
+        descCache.get(k)?.let { return it }
+        val sc = scope; var d = ""
+        if (sc.isNotEmpty()) {
+            try {
+                val sql = "SELECT d FROM p WHERE ch = ? AND s = ${p.start} AND src IN (" + sc.joinToString(",") { "?" } + ") LIMIT 1"
+                epgDb.rawQuery(sql, (listOf(normId(c.id)) + sc).toTypedArray()).use { cur -> if (cur.moveToFirst()) d = cur.getString(0) ?: "" }
+            } catch (e: Exception) {}
+        }
+        descCache.put(k, d)
+        return d
+    }
+
+    // end of the last programme in the database (for the guide files in view): the guide screen only lists days that have data
+    fun epgEnd(): Long {
+        val v = epgVer
+        if (endVer == v) return endCache
+        val sc = scope; var m = 0L
+        if (sc.isNotEmpty()) {
+            try {
+                epgDb.rawQuery("SELECT MAX(e) FROM p WHERE src IN (" + sc.joinToString(",") { "?" } + ")", sc.toTypedArray()).use { cur ->
+                    if (cur.moveToFirst() && !cur.isNull(0)) m = cur.getLong(0)
+                }
+            } catch (e: Exception) {}
+        }
+        endCache = m; endVer = v
         return m
     }
 
-    // the guide of all playlists together (used by search results and favorites)
-    fun mergedEpg(): HashMap<String, MutableList<Prog>> {
-        val all = HashMap<String, MutableList<Prog>>()
-        for (src in sources.toList()) for ((k, v) in epgMapFor(src)) if (!all.containsKey(k)) all[k] = v
-        return all
+    // ids of every channel of every playlist that uses this guide file: only those programmes are stored
+    fun wantedIds(u: String): HashSet<String> {
+        val out = HashSet<String>()
+        for (s in sources.toList()) if (u in epgUrls(s)) {
+            val l = chCache[s.id] ?: try { loadPlaylist(s, false) } catch (e: Exception) { emptyList() }
+            for (c in l) out.add(normId(c.id))
+        }
+        return out
     }
 
-    // rebuilds `epg` for what is on screen (merged guide while favorites / search are shown, else the active playlist's)
-    fun reloadEpg() {
-        Thread {
-            val e: HashMap<String, MutableList<Prog>> = if (multi()) mergedEpg() else (sources.getOrNull(act)?.let { epgMapFor(it) } ?: HashMap())
-            runOnUiThread { epg = e; ui.invalidate() }
-        }.start()
+    // reads one downloaded guide file straight into the database (nothing is collected in RAM); skipped when it was already imported
+    fun importEpg(u: String, f: File) {
+        val key = hx(u); val keep = wantedIds(u)
+        val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}"
+        if (prefs.getString("imp_$key", "") == mark) return
+        val lo = dayStart(); val hi = lo + epgDaysN * 86400000L
+        val fz = SimpleDateFormat("yyyyMMddHHmmss Z", java.util.Locale.US); val fl = SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
+        fun pt(s: String?): Long { val d = (s ?: "").trim(); return (if (d.length > 14) fz.parse(d) else fl.parse(d))!!.time }
+        var n = 0; var bad = false
+        val db = epgDb
+        val st = db.compileStatement("INSERT INTO p(src, ch, s, e, t, d) VALUES(?, ?, ?, ?, ?, ?)")
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM p WHERE src = ?", arrayOf<Any?>(key))
+            try {
+                val bis = f.inputStream().buffered(); bis.mark(2); val b0 = bis.read(); val b1 = bis.read(); bis.reset()
+                val ins = if (b0 == 0x1f && b1 == 0x8b) GZIPInputStream(bis, 65536) else bis
+                val p = Xml.newPullParser(); p.setInput(ins, null)
+                var ch = ""; var s = 0L; var e = 0L; var ti = ""; var de = ""; var ev = p.eventType
+                while (ev != XmlPullParser.END_DOCUMENT) {
+                    if (ev == XmlPullParser.START_TAG) {
+                        when (p.name) {
+                            "programme" -> {
+                                ti = ""; de = ""
+                                val raw = normId(p.getAttributeValue(null, "channel") ?: "")
+                                ch = if (raw.isNotEmpty() && (keep.isEmpty() || raw in keep)) raw else ""   // channels that are in none of your playlists are skipped
+                                if (ch.isNotEmpty()) {
+                                    try { s = pt(p.getAttributeValue(null, "start")); e = pt(p.getAttributeValue(null, "stop")); if (!(e > lo && s < hi)) ch = "" } catch (x: Exception) { ch = "" }
+                                }
+                            }
+                            "title" -> if (ch.isNotEmpty() && ti.isEmpty()) ti = p.nextText()
+                            "desc" -> if (ch.isNotEmpty() && de.isEmpty()) de = p.nextText().take(300)
+                        }
+                    } else if (ev == XmlPullParser.END_TAG && p.name == "programme" && ch.isNotEmpty()) {
+                        st.clearBindings(); st.bindString(1, key); st.bindString(2, ch); st.bindLong(3, s); st.bindLong(4, e); st.bindString(5, ti); st.bindString(6, de)
+                        st.executeInsert(); n++; ch = ""
+                    }
+                    ev = p.next()
+                }
+                ins.close()
+            } catch (ex: Exception) { bad = true }
+            if (!bad || n > 0) db.setTransactionSuccessful()   // a broken file with nothing readable keeps the old guide
+        } finally { db.endTransaction(); st.close() }
+        if (!bad) prefs.edit().putString("imp_$key", mark).apply()
     }
 
-    // a freshly loaded guide for the active playlist
-    fun applyEpg(e: HashMap<String, MutableList<Prog>>) {
-        runOnUiThread { if (multi()) reloadEpg() else epg = e; ui.invalidate() }
-    }
-
-    fun ensureEpg(urls: List<String>, force: Boolean) {
-        val need = urls.filter { force || !epgByUrl.containsKey(it) }
-        if (need.isEmpty()) return
-        fetch(need, "e", force, 12 * 3600_000L)
-        for (u in need) synchronized(lk("e" + u)) {
+    // downloads the guide files when they are older than the refresh setting (or when forced), then imports them
+    fun ensureEpg(urls: List<String>, force: Boolean, download: Boolean = true) {
+        if (urls.isEmpty()) return
+        val dl = urls.filter { force || !epgAt.containsKey(it) }
+        if (download && dl.isNotEmpty()) fetch(dl, "e", force, epgMaxAge())
+        for (u in urls) synchronized(lk("e" + u)) {
             val f = File(filesDir, "e" + hx(u))
-            if (f.exists() && (force || !epgByUrl.containsKey(u))) { epgByUrl[u] = parseEpgFile(f); epgAt[u] = System.currentTimeMillis() }
+            if (f.exists()) { importEpg(u, f); epgAt[u] = f.lastModified() }
         }
     }
 
-    // loads every other playlist and its EPG in the background so switching playlists is instant
+    // loads every other playlist and its guide in the background so switching playlists is instant
     fun preloadOthers(refresh: Boolean) {
         if (preloading) return
         preloading = true
@@ -1071,34 +1225,59 @@ class MainActivity : Activity() {
                 try { loadPlaylist(o, refresh); ensureEpg(epgUrls(o), false) } catch (e: Exception) {}
             }
             // favorites span all playlists: refresh them once everything is loaded
-            runOnUiThread { if (grp == 0 && !searching) { selectGroup(0, true); reloadEpg() } }
+            runOnUiThread { epgChanged(); if (grp == 0 && !searching) selectGroup(0, true) }
         } finally { preloading = false }
     }
 
     fun refreshEpgOnly() {
         val s = sources.getOrNull(act) ?: return
-        ensureEpg(epgUrls(s), false); val e = epgMapFor(s)
-        applyEpg(e)
+        ensureEpg(epgUrls(s), false); epgChanged()
         preloadOthers(false)
+    }
+
+    // scheduled / manual guide update: re-downloads the guide files that are older than the refresh setting (all of them when forced)
+    fun checkEpg(force: Boolean = false) {
+        if (epgBusy || sources.isEmpty()) return
+        if (!force && epgHours <= 0) return
+        val now = System.currentTimeMillis()
+        val all = sources.toList().flatMap { epgUrls(it) }.distinct()
+        val old = all.filter { force || now - (epgAt[it] ?: File(filesDir, "e" + hx(it)).lastModified()) > epgMaxAge() }
+        if (old.isEmpty()) return
+        epgBusy = true
+        Thread {
+            try {
+                Thread.currentThread().priority = Thread.MIN_PRIORITY
+                ensureEpg(old, true); epgChanged()
+                if (force) runOnUiThread { Toast.makeText(this, "Guide updated", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) {} finally { epgBusy = false }
+        }.start()
+    }
+
+    // the hourly check while the app is on screen (and once more each time you come back to it)
+    val epgTick: Runnable = object : Runnable { override fun run() { checkEpg(); pv.postDelayed(this, 3600_000L) } }
+
+    // leaving Settings: a changed guide length re-reads the files already on disk (no download)
+    fun settingsDone() {
+        if (!daysDirty) return
+        daysDirty = false
+        Thread {
+            try { ensureEpg(sources.toList().flatMap { epgUrls(it) }.distinct(), true, false); epgChanged() } catch (e: Exception) {}
+        }.start()
     }
 
     fun activate(i: Int, refresh: Boolean, boot: Boolean = false, keepFav: Boolean = false) {
         if (sources.isEmpty()) return
         act = i.coerceIn(0, sources.lastIndex); prefs.edit().putInt("act", act).apply()
-        if (refresh) { epgByUrl.clear(); epgAt.clear(); chCache.clear() }
+        if (refresh) { epgAt.clear(); chCache.clear() }
         val s = sources[act]
         Thread {
             try {
                 cleanCache()
                 val all = loadPlaylist(s, refresh); val urls = epgUrls(s)
-                val ready = urls.all { epgByUrl.containsKey(it) }
-                val fresh = urls.all { (epgAt[it] ?: 0L) > System.currentTimeMillis() - 6 * 3600_000L }
-                val e0 = if (ready) epgMapFor(s) else HashMap<String, MutableList<Prog>>()
-                runOnUiThread { if (!keepFav) epg = e0; setChannels(all, boot, keepFav) }
-                if (!ready || !fresh) {
-                    ensureEpg(urls, ready && !fresh); val e1 = epgMapFor(s)
-                    applyEpg(e1)
-                }
+                val ready = urls.all { epgAt.containsKey(it) }
+                val fresh = urls.all { (epgAt[it] ?: 0L) > System.currentTimeMillis() - epgMaxAge() }
+                runOnUiThread { setChannels(all, boot, keepFav); syncScope() }   // the guide already in the database shows straight away
+                ensureEpg(urls, refresh || (ready && !fresh)); epgChanged()
                 preloadOthers(refresh)
             } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() } }
         }.start()
@@ -1132,7 +1311,7 @@ class MainActivity : Activity() {
     fun selectGroup(i: Int, keep: Boolean = false) {
         searching = false; grp = i.coerceIn(0, groups.lastIndex); prefs.edit().putString("grp", groups[grp]).apply(); val v = vis()
         shown = when (grp) { 0 -> favChannels(); 1 -> v; else -> v.filter { it.group == groups[grp] } }
-        if (multi() != wide) { wide = multi(); reloadEpg() }
+        syncScope()
         ui.reset(keep)
     }
 
@@ -1144,8 +1323,7 @@ class MainActivity : Activity() {
                 val l = chCache[src.id] ?: try { loadPlaylist(src, false) } catch (e: Exception) { emptyList() }
                 for (c in l) if (c.name.contains(q, true) && (showHidden || c.url !in hidden)) res.add(c)
             }
-            val all = mergedEpg()
-            runOnUiThread { searching = true; wide = true; epg = all; shown = res; ui.open(1) }
+            runOnUiThread { searching = true; shown = res; syncScope(); ui.open(1) }
         }.start()
     }
     fun endSearch() {
@@ -1182,11 +1360,20 @@ class MainActivity : Activity() {
         return null
     }
 
+    // midnight of today
+    fun dayStart(): Long = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+
+    // the days the guide screen lists: today, then as many as the guide really has (at most the "Guide length" setting, never fewer than 2)
     fun days(): List<Long> {
-        val t = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
-        return listOf(t, t + 86400000L)
+        val c = java.util.Calendar.getInstance(); c.timeInMillis = dayStart()
+        val end = epgEnd(); val out = ArrayList<Long>()
+        for (i in 0 until maxOf(2, epgDaysN)) {
+            if (i >= 2 && c.timeInMillis >= end) break
+            out.add(c.timeInMillis); c.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+        return out
     }
-    fun dayProgs(ch: Ch, day: Long): List<Prog> = (epg[normId(ch.id)] ?: emptyList<Prog>()).filter { it.stop > day && it.start < day + 86400000L }
+    fun dayProgs(ch: Ch, day: Long): List<Prog> = progsOf(ch).filter { it.stop > day && it.start < day + 86400000L }
 
     // options bar next to a channel / program
     fun chOptions(c: Ch) = listOf("Watch", "Program info", "Channel guide", "Channel settings",
@@ -1303,7 +1490,7 @@ class MainActivity : Activity() {
 
     // main menu (OK button); the number is the icon id
     fun menuItems() = listOf(0 to "Search", 9 to "Playlists", 2 to "TV guide", 3 to "On air now", 4 to (if (showHidden) "Hide hidden" else "Show hidden"),
-        10 to "Themes", 8 to (if (seasonOn) "Seasonal: On" else "Seasonal: Off"), 6 to "Last channel", 7 to "Reload")
+        6 to "Last channel", 11 to "Settings")
 
     fun menuAct(i: Int) {
         when (i) {
@@ -1312,15 +1499,38 @@ class MainActivity : Activity() {
             2 -> ui.open(2)
             3 -> ui.open(1)
             4 -> { showHidden = !showHidden; selectGroup(grp, true) }
-            5 -> ui.openThemes()
-            6 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }   // menu stays open, the key handler redraws it
-            7 -> { ui.close(); prev?.let { play(it) } }
-            8 -> { ui.close(); activate(act, true) }
+            5 -> { ui.close(); prev?.let { play(it) } }
+            6 -> ui.openSettings()
         }
     }
 
-    fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return epg[normId(c.id)]?.firstOrNull { t >= it.start && t < it.stop } }
-    fun next(c: Ch): Prog? { val n = now(c) ?: return null; return epg[normId(c.id)]?.firstOrNull { it.start >= n.stop } }
+    // settings panel rows: name to current value
+    fun settingsItems() = listOf(
+        "Themes" to themeNames()[themeIdx.coerceIn(0, THEMES.size)],
+        "Seasonal decorations" to (if (seasonOn) "On" else "Off"),
+        "Guide refresh" to (if (epgHours <= 0) "Manual only" else "Every $epgHours hours"),
+        "Guide length" to "$epgDaysN days",
+        "Update guide now" to "")
+
+    // d = -1 (LEFT) or +1 (RIGHT / OK)
+    fun settingAct(i: Int, d: Int) {
+        when (i) {
+            0 -> if (d > 0) ui.openThemes()
+            1 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }
+            2 -> {
+                val k = REFRESH_OPTS.indexOf(epgHours).let { if (it < 0) 2 else it }
+                epgHours = REFRESH_OPTS[(k + d + REFRESH_OPTS.size) % REFRESH_OPTS.size]; prefs.edit().putInt("epgH", epgHours).apply()
+            }
+            3 -> {
+                val k = DAYS_OPTS.indexOf(epgDaysN).let { if (it < 0) 3 else it }
+                epgDaysN = DAYS_OPTS[(k + d + DAYS_OPTS.size) % DAYS_OPTS.size]; prefs.edit().putInt("epgD", epgDaysN).apply(); daysDirty = true
+            }
+            4 -> if (d > 0) { Toast.makeText(this, "Updating guide...", Toast.LENGTH_SHORT).show(); checkEpg(true) }
+        }
+    }
+
+    fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return progsOf(c).firstOrNull { t >= it.start && t < it.stop } }
+    fun next(c: Ch): Prog? { val n = now(c) ?: return null; return progsOf(c).firstOrNull { it.start >= n.stop } }
 
     fun play(c: Ch) {
         if (cur != null && cur != c) prev = cur
@@ -1367,45 +1577,13 @@ class MainActivity : Activity() {
         val n = now(c); val x = next(c)
         val bar = n?.let { val k = (((System.currentTimeMillis() - it.start) * 10) / maxOf(1L, it.stop - it.start)).toInt().coerceIn(0, 10); "▰".repeat(k) + "▱".repeat(10 - k) }
         return "${c.num}  ${c.name}" +
-                (n?.let { "\n${hm.format(it.start)}–${hm.format(it.stop)}  ${it.title}\n$bar" + (if (it.desc.isNotEmpty()) "\n${it.desc}" else "") } ?: "\nNo guide data") +
+                (n?.let { "\n${hm.format(it.start)}–${hm.format(it.stop)}  ${it.title}\n$bar" + (descOf(c, it).let { d -> if (d.isNotEmpty()) "\n$d" else "" }) } ?: "\nNo guide data") +
                 (x?.let { "\nNext ${hm.format(it.start)}  ${it.title}" } ?: "")
     }
 
     fun zap(d: Int) {
         val l = if (shown.isNotEmpty()) shown else channels; if (l.isEmpty()) return
         val i = l.indexOf(cur); play(l[((if (i < 0) 0 else i) + d + l.size) % l.size])
-    }
-
-    fun ts(s: String): Long { val d = s.trim(); return (if (d.length > 14) fmtZ.parse(d) else fmt.parse(d))!!.time }
-
-    // reads one EPG file into a map (normalized channel id -> programmes) for today + tomorrow
-    fun parseEpgFile(f: File): HashMap<String, MutableList<Prog>> {
-        val m = HashMap<String, MutableList<Prog>>(); val now = System.currentTimeMillis()
-        val lo = days()[0]; val hi = lo + 2 * 86400000L
-        try {
-            val bis = f.inputStream().buffered(); bis.mark(2); val b0 = bis.read(); val b1 = bis.read(); bis.reset()
-            val ins = if (b0 == 0x1f && b1 == 0x8b) GZIPInputStream(bis, 65536) else bis
-            val p = Xml.newPullParser(); p.setInput(ins, null)
-            var ch = ""; var s = 0L; var e = 0L; var ti = ""; var de = ""; var ev = p.eventType
-            while (ev != XmlPullParser.END_DOCUMENT) {
-                if (ev == XmlPullParser.START_TAG) {
-                    when (p.name) {
-                        "programme" -> {
-                            ch = p.getAttributeValue(null, "channel") ?: ""; ti = ""; de = ""
-                            try { s = ts(p.getAttributeValue(null, "start")); e = ts(p.getAttributeValue(null, "stop")) } catch (x: Exception) { ch = "" }
-                        }
-                        "title" -> if (ch.isNotEmpty() && ti.isEmpty()) ti = p.nextText()
-                        "desc" -> if (ch.isNotEmpty() && s < now + 12 * 3600_000L && e > now - 3600_000L) de = p.nextText().take(400)
-                    }
-                } else if (ev == XmlPullParser.END_TAG && p.name == "programme" && ch.isNotEmpty()) {
-                    if (e > lo && s < hi) m.getOrPut(normId(ch)) { ArrayList() }.add(Prog(s, e, ti, de)); ch = ""
-                }
-                ev = p.next()
-            }
-            ins.close()
-        } catch (ex: Exception) {}
-        for (k in m.keys.toList()) m[k] = m[k]!!.sortedBy { it.start }.distinctBy { it.start }.toMutableList()
-        return m
     }
 
     var dlg: android.app.Dialog? = null
@@ -1673,6 +1851,30 @@ EG.forEach(add);if(!EG.length)add({})
 
     val numRun = Runnable { val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { play(it) } }
 
+    // BACK is handled here (before any view sees it): a short press goes back, holding it exits the app completely
+    var backLong = false
+    override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
+        if (ev.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (ev.action == KeyEvent.ACTION_DOWN) {
+                if (ev.repeatCount == 0) backLong = false
+                else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true; exitApp() }
+            } else if (ev.action == KeyEvent.ACTION_UP) {
+                if (!backLong) backShort(ev)
+                backLong = false
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(ev)
+    }
+
+    fun backShort(ev: KeyEvent) {
+        if (ui.mode != 0) { ui.onKeyDown(KeyEvent.KEYCODE_BACK, ev); return }
+        if (prev != null) prev?.let { play(it) } else flash("Hold BACK to exit the app", 2500)
+    }
+
+    // closes the app for real and frees all of its memory
+    fun exitApp() { exiting = true; finishAndRemoveTask() }
+
     override fun onKeyDown(k: Int, e: KeyEvent): Boolean {
         if (ui.mode != 0) { ui.requestFocus(); return ui.onKeyDown(k, e) }
         val dir = if (REVERSED) 1 else -1
@@ -1685,7 +1887,6 @@ EG.forEach(add);if(!EG.length)add({})
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_PROG_BLUE -> ui.open(2)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MENU -> ui.openMenu()
             KeyEvent.KEYCODE_INFO -> cur?.let { banner.show(it) }
-            KeyEvent.KEYCODE_BACK -> if (prev != null) prev?.let { play(it) } else return super.onKeyDown(k, e)
             KeyEvent.KEYCODE_LAST_CHANNEL -> prev?.let { play(it) }
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
                 val d = k - KeyEvent.KEYCODE_0
@@ -1697,7 +1898,18 @@ EG.forEach(add);if(!EG.length)add({})
         return true
     }
 
-    override fun onStop() { super.onStop(); player.pause(); stopServer() }
-    override fun onStart() { super.onStart(); if (cur != null) player.play() }
-    override fun onDestroy() { super.onDestroy(); player.release() }
+    override fun onStop() { super.onStop(); player.pause(); stopServer(); pv.removeCallbacks(epgTick) }
+    override fun onStart() {
+        super.onStart(); if (cur != null) player.play()
+        pv.removeCallbacks(epgTick); pv.postDelayed(epgTick, 60_000L)   // coming back from Home: refresh the guide a minute later if it is older than the refresh setting
+    }
+    // pressing Home: give back the memory that is only a cache (logos, programmes read for the screen); they are re-read when needed
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) { logos.evictAll(); progCache.evictAll(); descCache.evictAll() }
+    }
+    override fun onDestroy() {
+        super.onDestroy(); player.release()
+        if (exiting) { try { epgDb.close() } catch (e: Exception) {}; android.os.Process.killProcess(android.os.Process.myPid()) }
+    }
 }
