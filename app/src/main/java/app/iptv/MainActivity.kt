@@ -683,6 +683,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
         }
         txt(c, "LEFT / RIGHT  change     OK  select     BACK  close", 20 * d, rh * (items.size + 1.8f), pw - 40 * d, 14f, GRAY)
+        txt(c, "LiteTV ${a.verLabel}", 20 * d, h - 16 * d, pw - 40 * d, 14f, GRAY)
     }
 
     // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
@@ -954,6 +955,9 @@ class MainActivity : Activity() {
     val failed: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
     val pool: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newFixedThreadPool(2)
     val hideOsd = Runnable { osd.visibility = View.GONE }
+
+    // the app version shown at the bottom of Settings; read from the installed app, so it always matches versionName in build.gradle.kts
+    val verLabel: String by lazy { try { "v" + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" } }
 
     // true while the list mixes channels of several playlists (search results, favorites)
     fun multi() = searching || grp == 0
