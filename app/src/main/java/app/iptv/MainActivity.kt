@@ -234,14 +234,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val LAVT: Int get() = T.lavT
     val dd = java.text.SimpleDateFormat("dd.MM"); val wd = java.text.SimpleDateFormat("EEE"); val wdd = java.text.SimpleDateFormat("EEE dd.MM")
     val S = 6; val dir = if (REVERSED) 1 else -1
-    // mode: 0 hidden, 1 channel list, 2 date/channel/program, 3 main menu (OK), 4 channel settings, 5 program info, 6 theme list, 7 custom theme editor, 8 settings
+    // mode: 0 hidden, 1 channel list, 2 date/channel/program, 3 main menu (OK), 4 channel settings, 5 program info, 6 theme list, 7 custom theme editor, 8 settings, 9 favorite group order
     var mode = 0; var sideLvl = 0; var sideFocus = 1; var catSel = 1; var plSel = 0   // sideLvl: 0 none, 1 categories, 2 playlists + categories
     var side: Boolean
         get() = sideLvl > 0
         set(v) { if (!v) sideLvl = 0 }
     var sel = 0; var oi = 0; var bar = false; var col = 1; var dayI = 0; var progI = 0; var menuSel = 0
     var subI = 0; var subOpen = false; var oj = 0
-    var themeSel = 0; var cRow = 0; var setSel = 0
+    var themeSel = 0; var cRow = 0; var setSel = 0; var grpSel = 0; var grpGrab = false
     var infoCh: Ch? = null; var infoProg: Prog? = null; var backMode = 1
     var selSince = SystemClock.uptimeMillis()
     var menuShader: Shader? = null; var menuShaderW = 0
@@ -337,12 +337,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun openMenu() { menuSel = 0; show(3); invalidate() }
     fun openThemes() { themeSel = a.themeIdx; show(6); invalidate() }
     fun openSettings() { setSel = 0; show(8); invalidate() }
+    fun openFavGroups() { grpSel = 0; grpGrab = false; show(9); invalidate() }
     fun openSub() { backMode = if (mode == 2) 2 else 1; subI = 0; subOpen = false; show(4); invalidate() }
     fun openInfo(ch: Ch, pr: Prog?) { backMode = if (mode == 2) 2 else 1; infoCh = ch; infoProg = pr; show(5); invalidate() }
     fun close() {
         if (mode == 6) a.setTheme(a.themeIdx, false)   // leaving the theme list without pressing OK: drop the preview
         a.settingsDone()
-        mode = 0; sideLvl = 0; removeCallbacks(idle); visibility = View.GONE; if (a.searching) a.endSearch()
+        grpGrab = false; mode = 0; sideLvl = 0; removeCallbacks(idle); visibility = View.GONE; if (a.searching) a.endSearch()
     }
     fun openSide(pl: Boolean = false) {
         sideLvl = if (pl) 2 else 1; sideFocus = if (pl) 2 else 1
@@ -361,6 +362,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             5 -> drawInfo(c, w, h)
             6, 7 -> drawThemes(c, w, h)
             8 -> drawSettings(c, w, h)
+            9 -> drawFavGroups(c, w, h)
         }
         if (panels) {
             var x = 0f
@@ -672,14 +674,34 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         items.forEachIndexed { i, row ->
             val y = rh * (i + 1); val on = i == setSel
             if (on) fill(c, 0f, y, pw - 2, rh - 2, PUR)
-            txt(c, row.first, 20 * d, y + rh * 0.62f, pw * 0.5f, 18f, -1, on)
+            val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
+            txt(c, row.first, 20 * d, y + rh * 0.62f, pw * 0.5f, 18f, if (en) -1 else 0x88FFFFFF.toInt(), on)
             if (row.second.isNotEmpty()) {
-                tp.textSize = 17 * d; tp.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.color = if (on) -1 else GRAY; tp.textAlign = Paint.Align.RIGHT
-                val v = if (on && i in 1..3) "<  ${row.second}  >" else row.second
+                tp.textSize = 17 * d; tp.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.color = if (!en) 0x88FFFFFF.toInt() else if (on) -1 else GRAY; tp.textAlign = Paint.Align.RIGHT
+                val v = if (on && en && (i in 1..3 || i == 5 || i == 6)) "<  ${row.second}  >" else row.second
                 c.drawText(TextUtils.ellipsize(v, tp, pw * 0.45f, TextUtils.TruncateAt.END).toString(), pw - 20 * d, y + rh * 0.62f, tp)
             }
         }
         txt(c, "LEFT / RIGHT  change     OK  select     BACK  close", 20 * d, rh * (items.size + 1.8f), pw - 40 * d, 14f, GRAY)
+    }
+
+    // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
+    fun drawFavGroups(c: Canvas, w: Float, h: Float) {
+        val names = a.favGroupNames().map { it.second }; val pw = w * 0.3f; val rh = h / 11f
+        if (names.isEmpty()) {
+            fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
+            txt(c, "FAVORITE GROUPS", 20 * d, rh * 0.62f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
+            txt(c, "No favorites yet", 20 * d, h / 2, pw - 40 * d, 18f, GRAY)
+            return
+        }
+        val si = grpSel.coerceIn(0, names.lastIndex)
+        drawPanel(c, 0f, pw, h, "Favorite groups", names, si, if (grpGrab) si else -1, true)
+        val x = pw + 24 * d; val mw = w - x - 20 * d; val y0 = rh * 1.62f; val ls = rh * 0.6f
+        txt(c, if (grpGrab) "UP / DOWN  move the group" else "UP / DOWN  choose a group", x, y0, mw, 17f, -1, true)
+        txt(c, if (grpGrab) "OK or BACK  drop it here" else "OK  grab it to move", x, y0 + ls, mw, 17f, -1, true)
+        if (!grpGrab) txt(c, "BACK  close", x, y0 + 2 * ls, mw, 17f, GRAY)
+        txt(c, if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", x, y0 + 3.6f * ls, mw, 15f, GRAY)
+        txt(c, "\"Other\" always stays last", x, y0 + 4.4f * ls, mw, 15f, GRAY)
     }
 
     // theme list (mode 6) or custom colour editor (mode 7), each with a live preview of the colours
@@ -803,6 +825,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 5 -> mode = backMode
                 mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 8 }   // back to settings, preview dropped
                 mode == 8 -> { a.settingsDone(); mode = 3 }
+                mode == 9 -> { if (grpGrab) grpGrab = false else mode = 8 }   // drop the group, then back to settings
                 mode == 7 -> mode = 6                                       // custom colours are already saved
                 else -> close()
             }
@@ -836,6 +859,16 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         } else if (mode == 8) {
             val n = a.settingsItems().size
             when { up -> setSel = (setSel + n - 1) % n; dn -> setSel = (setSel + 1) % n; lf -> a.settingAct(setSel, -1); rt -> a.settingAct(setSel, 1); ok -> a.settingAct(setSel, 1) }
+        } else if (mode == 9) {
+            val gn = a.favGroupNames(); val n = gn.size; val mv = gn.count { it.first != "other" }   // "Other" is pinned last and cannot be moved
+            when {
+                up || dn -> {
+                    val dl = if (up) -1 else 1
+                    if (grpGrab) { val to = grpSel + dl; if (to in 0 until mv) { a.moveFavGroup(grpSel, to); grpSel = to } }
+                    else if (n > 0) grpSel = (grpSel + dl + n) % n
+                }
+                ok -> if (grpSel < mv) grpGrab = !grpGrab
+            }
         } else if (mode == 6) {
             val n = a.themeNames().size   // the last entry is "Custom"
             when {
@@ -889,6 +922,11 @@ class MainActivity : Activity() {
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
     var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false; val nOpts = 6
     val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false
+    val favSeq = java.util.concurrent.CopyOnWriteArrayList<String>()          // favorite urls in the order they were added
+    val favGroupOrder = java.util.concurrent.CopyOnWriteArrayList<String>()   // your order of the favorite groups (lower-case group names)
+    var favSort = 0; var favInner = 2                                          // favorites sort mode, and the sort inside a group (Custom groups mode)
+    val FAV_SORTS = arrayOf("Custom groups", "Order added", "Channel number", "A to Z", "Z to A")
+    val FAV_INNER = arrayOf("Order added", "Channel number", "A to Z")
     var errShown = false
     val arNames = arrayOf("Fit", "Zoom", "Stretch")
     var themeIdx = 0   // saved theme: 0 until THEMES.size - 1 = premade, THEMES.size = Custom
@@ -966,6 +1004,7 @@ class MainActivity : Activity() {
         Thread { try { epgDb.isOpen } catch (e: Exception) {} }.start()   // open the guide database in the background
         seasonOn = prefs.getBoolean("season", true)
         favs.addAll(prefs.getStringSet("favs", emptySet())!!); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
+        loadFavPrefs()
         root = FrameLayout(this); root.setBackgroundColor(C_BG)
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
         osd = TextView(this).apply { setTextColor(-1); textSize = 20f; setPadding(40, 20, 40, 20); setBackgroundColor(C_BG); visibility = View.GONE }
@@ -1299,7 +1338,7 @@ class MainActivity : Activity() {
     fun vis() = if (showHidden) channels else channels.filter { it.url !in hidden }
 
     // favorited channels from every playlist that is loaded (the active one is always included)
-    fun favChannels(): List<Ch> {
+    fun favRaw(): List<Ch> {
         val out = ArrayList<Ch>(); val seen = HashSet<String>(); val activeId = sources.getOrNull(act)?.id
         for (s in sources.toList()) {
             val l = chCache[s.id] ?: (if (s.id == activeId) channels else emptyList())
@@ -1307,6 +1346,88 @@ class MainActivity : Activity() {
         }
         return out
     }
+
+    // ---- favorites order: sort mode, group order (by the M3U group-title) and the order channels were added in ----
+    fun loadFavPrefs() {
+        favSort = prefs.getInt("favSort", 0).coerceIn(0, FAV_SORTS.lastIndex)
+        favInner = prefs.getInt("favInner", 2).coerceIn(0, FAV_INNER.lastIndex)
+        favSeq.clear(); favGroupOrder.clear()
+        try { val a = JSONArray(prefs.getString("favSeq", "[]")); for (k in 0 until a.length()) { val u = a.getString(k); if (u in favs && u !in favSeq) favSeq.add(u) } } catch (e: Exception) {}
+        val seen = HashSet<String>(favSeq); favs.filter { it !in seen }.sorted().forEach { favSeq.add(it) }   // favorites from before this feature: no known order, kept sorted
+        try { val a = JSONArray(prefs.getString("favGroups", "[]")); for (k in 0 until a.length()) favGroupOrder.add(a.getString(k)) } catch (e: Exception) {}
+        saveFavSeq()
+    }
+    fun saveFavSeq() { prefs.edit().putString("favSeq", JSONArray(favSeq).toString()).apply() }
+    fun saveFavGroups() { prefs.edit().putString("favGroups", JSONArray(favGroupOrder).toString()).apply() }
+
+    fun toggleFav(u: String) {
+        toggle(favs, "favs", u)
+        if (u in favs) { if (u !in favSeq) favSeq.add(u) } else favSeq.remove(u)
+        saveFavSeq()
+    }
+
+    // a favorite's group = the first group-title of its M3U entry ("News;Finnish" -> "News"), matched without case; no group = "Other"
+    fun favKey(c: Ch): String = c.group.substringBefore(';').trim().ifEmpty { "Other" }
+    fun favKeyL(c: Ch): String = favKey(c).lowercase()
+
+    // A to Z key: leading symbols and a leading "The" are ignored
+    fun favSortName(c: Ch): String {
+        var s = c.name.trim().dropWhile { !it.isLetterOrDigit() }
+        if (s.startsWith("the ", true)) s = s.substring(4)
+        return s
+    }
+    val coll: java.text.Collator by lazy { java.text.Collator.getInstance(java.util.Locale("fi")).apply { strength = java.text.Collator.SECONDARY } }   // ignores case, knows ä ö å
+
+    // 0 = order added, 1 = channel number (playlist order first, then number), 2 = A to Z
+    fun innerCmp(mode: Int): Comparator<Ch> {
+        val sp = HashMap<String, Int>(); favSeq.forEachIndexed { i, u -> sp[u] = i }
+        val si = HashMap<String, Int>(); sources.forEachIndexed { i, s -> si[s.id] = i }
+        return when (mode) {
+            0 -> Comparator<Ch> { x, y -> (sp[x.url] ?: Int.MAX_VALUE).compareTo(sp[y.url] ?: Int.MAX_VALUE) }
+            1 -> Comparator<Ch> { x, y -> val d = (si[x.src] ?: 0).compareTo(si[y.src] ?: 0); if (d != 0) d else x.num.compareTo(y.num) }
+            else -> Comparator<Ch> { x, y -> coll.compare(favSortName(x), favSortName(y)) }
+        }
+    }
+
+    // the groups that exist among these favorites, in your saved order; new groups go at the end, "Other" is always last (key to display name)
+    fun favGroupsOrdered(l: List<Ch>): List<Pair<String, String>> {
+        val seen = LinkedHashMap<String, String>()
+        for (c in l) { val k = favKeyL(c); if (k !in seen) seen[k] = favKey(c) }
+        val ks = ArrayList<String>()
+        for (k in favGroupOrder) if (k in seen && k != "other" && k !in ks) ks.add(k)
+        for (k in seen.keys) if (k !in ks && k != "other") ks.add(k)
+        if ("other" in seen) ks.add("other")
+        return ks.map { it to seen[it]!! }
+    }
+    fun favGroupNames(): List<Pair<String, String>> = favGroupsOrdered(favRaw())
+
+    fun sortFav(l: List<Ch>): List<Ch> = when (favSort) {
+        0 -> {
+            val pos = HashMap<String, Int>(); favGroupsOrdered(l).forEachIndexed { i, g -> pos[g.first] = i }
+            val byGroup = Comparator<Ch> { x, y -> (pos[favKeyL(x)] ?: 0).compareTo(pos[favKeyL(y)] ?: 0) }
+            l.sortedWith(byGroup.then(innerCmp(favInner)))
+        }
+        1 -> l.sortedWith(innerCmp(0))
+        2 -> l.sortedWith(innerCmp(1))
+        3 -> l.sortedWith(innerCmp(2))
+        else -> { val ic = innerCmp(2); l.sortedWith(Comparator<Ch> { x, y -> ic.compare(y, x) }) }
+    }
+    fun favChannels(): List<Ch> = sortFav(favRaw())
+
+    // keys = the groups in their new order; groups that are not among the favorites right now keep their saved place after them
+    fun setFavGroupOrder(keys: List<String>) {
+        val k2 = keys.map { it.lowercase() }.filter { it != "other" }.distinct()
+        val rest = favGroupOrder.filter { it !in k2 }
+        favGroupOrder.clear(); favGroupOrder.addAll(k2 + rest); saveFavGroups()
+    }
+    fun moveFavGroup(from: Int, to: Int) {
+        val ks = favGroupNames().map { it.first }.filter { it != "other" }.toMutableList()
+        if (from !in ks.indices || to !in ks.indices) return
+        ks.add(to, ks.removeAt(from))
+        setFavGroupOrder(ks); applyFavSort()
+    }
+    // the sort setting or the group order changed: rebuild the list if the favorites are on screen
+    fun applyFavSort() { if (grp == 0 && !searching) selectGroup(0, true) }
 
     fun selectGroup(i: Int, keep: Boolean = false) {
         searching = false; grp = i.coerceIn(0, groups.lastIndex); prefs.edit().putString("grp", groups[grp]).apply(); val v = vis()
@@ -1387,7 +1508,7 @@ class MainActivity : Activity() {
             1 -> ui.openInfo(c, p ?: now(c))
             2 -> ui.openGuide(c)
             3 -> { if (c != cur) play(c); ui.openSub() }
-            4 -> { toggle(favs, "favs", c.url); selectGroup(grp, true) }
+            4 -> { toggleFav(c.url); selectGroup(grp, true) }
             5 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
         }
         ui.invalidate()
@@ -1510,7 +1631,13 @@ class MainActivity : Activity() {
         "Seasonal decorations" to (if (seasonOn) "On" else "Off"),
         "Guide refresh" to (if (epgHours <= 0) "Manual only" else "Every $epgHours hours"),
         "Guide length" to "$epgDaysN days",
-        "Update guide now" to "")
+        "Update guide now" to "",
+        "Favorites sort" to FAV_SORTS[favSort],
+        "Within groups" to FAV_INNER[favInner],
+        "Reorder groups" to (if (favSort == 0) "" else "Custom groups only"))
+
+    // "Within groups" and "Reorder groups" only apply to the Custom groups sort
+    fun settingEnabled(i: Int): Boolean = if (i == 6 || i == 7) favSort == 0 else true
 
     // d = -1 (LEFT) or +1 (RIGHT / OK)
     fun settingAct(i: Int, d: Int) {
@@ -1526,6 +1653,9 @@ class MainActivity : Activity() {
                 epgDaysN = DAYS_OPTS[(k + d + DAYS_OPTS.size) % DAYS_OPTS.size]; prefs.edit().putInt("epgD", epgDaysN).apply(); daysDirty = true
             }
             4 -> if (d > 0) { Toast.makeText(this, "Updating guide...", Toast.LENGTH_SHORT).show(); checkEpg(true) }
+            5 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
+            6 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
+            7 -> if (favSort == 0 && d > 0) ui.openFavGroups()
         }
     }
 
@@ -1652,7 +1782,7 @@ ask('Remove '+(n||'this item')+'?','It is removed when you press Save.',function
     fun page(msg: String?): String {
         val json = JSONArray().apply { sources.forEach { sc -> put(JSONObject().put("i", sc.id).put("n", sc.name).put("m", sc.m3u).put("e", epgs.firstOrNull { e -> e.owner == sc.id }?.url ?: "")) } }.toString().replace("</", "<\\/")
         return """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><meta name=color-scheme content=dark><title>LiteTV playlists</title>$iconLink
-$css<body><div class=hd>$logoSvg<h2>Lite<span>TV</span> playlists</h2></div><a href=/epg>Shared EPGs &rarr;</a>${if (msg != null) "<p class=msg>$msg</p>" else ""}
+$css<body><div class=hd>$logoSvg<h2>Lite<span>TV</span> playlists</h2></div><a href=/epg>Shared EPGs &rarr;</a> &nbsp;&nbsp; <a href=/favs>Favorites order &rarr;</a>${if (msg != null) "<p class=msg>$msg</p>" else ""}
 <form method=post><div id=rows></div>
 <button type=button onclick="add({})">+ Add playlist</button>
 <button class=p style='margin-left:12px'>Save</button></form>
@@ -1704,12 +1834,63 @@ EG.forEach(add);if(!EG.length)add({})
 </script>"""
     }
 
-    // backup = playlists + EPGs + favorites, read from the saved settings (safe to call from the web server thread)
-    fun backupJson(): String = JSONObject().put("app", "LiteTV").put("v", 1)
-        .put("sources", JSONArray(prefs.getString("srcs", "[]")))
-        .put("epgs", JSONArray(prefs.getString("epgs", "[]")))
-        .put("favs", JSONArray((prefs.getStringSet("favs", emptySet()) ?: emptySet()).toList()))
-        .toString(2)
+    // phone page: drag the favorite groups into the order you want; every change is saved on the TV straight away
+    fun favsPage(): String {
+        val raw = favRaw(); val cnt = HashMap<String, Int>(); raw.forEach { c -> val k = favKeyL(c); cnt[k] = (cnt[k] ?: 0) + 1 }
+        val g = JSONArray(); favGroupsOrdered(raw).forEach { (k, n) -> g.put(JSONObject().put("k", k).put("n", n).put("c", cnt[k] ?: 0)) }
+        val json = g.toString().replace("</", "<\\/")
+        val note = if (favSort == 0) "Drag a group by the handle, or use Top / the arrows. The TV updates as soon as you let go. Top of this list = lowest channel numbers."
+        else "The TV sorts favorites by ${FAV_SORTS[favSort]} right now. This order is saved, but it is only used when Favorites sort is Custom groups (TV: OK, Settings)."
+        return """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><meta name=color-scheme content=dark><title>LiteTV favorites order</title>$iconLink
+$css<style>.nm{flex:1;font-weight:bold;font-size:18px}.cnt{color:#B8BECC;margin-right:12px;font-size:14px}.fix{opacity:.6}.card .top{margin-bottom:0}</style>
+<body><div class=hd>$logoSvg<h2>Lite<span>TV</span> favorites order</h2></div><a href=/>&larr; Playlists</a>
+<p class=sub>$note</p><p id=ms class=msg style='display:none;position:sticky;top:8px;z-index:5'></p>
+<div id=rows></div>
+<script>
+var G=$json,R=document.getElementById('rows'),M=document.getElementById('ms'),tm;
+function keys(){return Array.prototype.map.call(R.children,function(d){return d.dataset.k})}
+function say(s){M.style.display='block';M.textContent=s;clearTimeout(tm);tm=setTimeout(function(){M.style.display='none'},1800)}
+function save(){fetch('/favs',{method:'POST',body:JSON.stringify(keys())}).then(function(r){return r.text()}).then(function(x){say(x=='ok'?'Saved on TV':x)}).catch(function(){say('Could not reach the TV')})}
+function fixed(d){return d.dataset.k=='other'}
+function toTop(b){var d=b.closest('.card');if(d!=R.firstElementChild){R.insertBefore(d,R.firstElementChild);save()}}
+function up(b){var d=b.closest('.card'),p=d.previousElementSibling;if(p){R.insertBefore(d,p);save()}}
+function dn(b){var d=b.closest('.card'),n=d.nextElementSibling;if(n&&!fixed(n)){R.insertBefore(n,d);save()}}
+function drag(ev,d){ev.preventDefault();var h=ev.target,b0=keys().join();h.setPointerCapture(ev.pointerId);d.classList.add('drag');
+h.onpointermove=function(e){var p=d.previousElementSibling,n=d.nextElementSibling;
+if(e.clientY<60)scrollBy(0,-12);if(e.clientY>innerHeight-60)scrollBy(0,12);
+if(p){var a=p.getBoundingClientRect();if(e.clientY<a.top+a.height/2)R.insertBefore(d,p)}
+if(n&&!fixed(n)){var c=n.getBoundingClientRect();if(e.clientY>c.top+c.height/2)R.insertBefore(n,d)}};
+h.onpointerup=h.onpointercancel=function(){d.classList.remove('drag');h.onpointermove=null;if(keys().join()!=b0)save()}}
+function add(g){var d=document.createElement('div'),f=g.k=='other';d.className='card'+(f?' fix':'');d.dataset.k=g.k;
+d.innerHTML='<div class=top>'+(f?'':'<span class=hdl>&#9776;</span>')+'<span class=nm></span><span class=cnt></span>'+(f?'':'<span><button type=button class=a onclick="toTop(this)">Top</button><button type=button class=a onclick="up(this)">&#9650;</button><button type=button class=a onclick="dn(this)">&#9660;</button></span>')+'</div>';
+d.querySelector('.nm').textContent=g.n;d.querySelector('.cnt').textContent=g.c+(g.c==1?' channel':' channels');
+var h=d.querySelector('.hdl');if(h)h.onpointerdown=function(ev){drag(ev,d)};R.appendChild(d)}
+G.forEach(add);
+if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent='No favorites yet. Add channels on the TV with "Add to favorites".';R.appendChild(p)}
+</script>"""
+    }
+
+    // the phone sends the new group order as a JSON list of group keys
+    fun saveFavOrderFromPhone(txt: String): String = try {
+        val a = JSONArray(txt); val ks = (0 until a.length()).map { a.getString(it) }
+        runOnUiThread { setFavGroupOrder(ks); applyFavSort() }
+        "ok"
+    } catch (e: Exception) { "Could not read the order" }
+
+    // backup = playlists + EPGs + favorites (in the order they were added) + favorites sort settings, read from the saved settings (safe to call from the web server thread)
+    fun backupJson(): String {
+        val fv = prefs.getStringSet("favs", emptySet()) ?: emptySet()
+        val ord = ArrayList<String>()
+        try { val a = JSONArray(prefs.getString("favSeq", "[]")); for (k in 0 until a.length()) { val u = a.getString(k); if (u in fv && u !in ord) ord.add(u) } } catch (e: Exception) {}
+        fv.filter { it !in ord }.sorted().forEach { ord.add(it) }
+        return JSONObject().put("app", "LiteTV").put("v", 1)
+            .put("sources", JSONArray(prefs.getString("srcs", "[]")))
+            .put("epgs", JSONArray(prefs.getString("epgs", "[]")))
+            .put("favs", JSONArray(ord))
+            .put("favSort", prefs.getInt("favSort", 0)).put("favInner", prefs.getInt("favInner", 2))
+            .put("favGroups", JSONArray(prefs.getString("favGroups", "[]")))
+            .toString(2)
+    }
 
     // replaces playlists, EPGs and favorites with the ones in a backup file; returns an error text, or null when it worked
     fun restoreBackup(txt: String): String? {
@@ -1719,11 +1900,14 @@ EG.forEach(add);if(!EG.length)add({})
             val sa = o.optJSONArray("sources") ?: return "The file has no playlists"
             val ea = o.optJSONArray("epgs") ?: JSONArray()
             val fa = o.optJSONArray("favs") ?: JSONArray()
-            val fv = HashSet<String>(); for (k in 0 until fa.length()) fv.add(fa.getString(k))
-            prefs.edit().putString("srcs", sa.toString()).putString("epgs", ea.toString()).putStringSet("favs", HashSet(fv)).apply()
+            val fv = LinkedHashSet<String>(); for (k in 0 until fa.length()) fv.add(fa.getString(k))
+            val ga = o.optJSONArray("favGroups") ?: JSONArray()
+            prefs.edit().putString("srcs", sa.toString()).putString("epgs", ea.toString()).putStringSet("favs", HashSet(fv))
+                .putString("favSeq", JSONArray(fv.toList()).toString()).putString("favGroups", ga.toString())
+                .putInt("favSort", o.optInt("favSort", 0).coerceIn(0, FAV_SORTS.lastIndex)).putInt("favInner", o.optInt("favInner", 2).coerceIn(0, FAV_INNER.lastIndex)).apply()
             runOnUiThread {
                 val curId = sources.getOrNull(act)?.id
-                sources = readSrcs(); epgs = readEpgs(); favs.clear(); favs.addAll(fv)
+                sources = readSrcs(); epgs = readEpgs(); favs.clear(); favs.addAll(fv); loadFavPrefs()
                 act = maxOf(0, sources.indexOfFirst { it.id == curId })
                 if (sources.isEmpty()) settings() else activate(act, true)
             }
@@ -1766,6 +1950,7 @@ EG.forEach(add);if(!EG.length)add({})
                     len = minOf(len, 4_000_000); val buf = ByteArray(len); var r = 0
                     while (r < len) { val n = i.read(buf, r, len - r); if (n < 0) break; r += n }
                     if (path.startsWith("/restore")) { send(restoreBackup(String(buf, 0, r, Charsets.UTF_8)) ?: "ok", "text/plain; charset=utf-8"); return@use }
+                    if (path.startsWith("/favs")) { send(saveFavOrderFromPhone(String(buf, 0, r, Charsets.UTF_8)), "text/plain; charset=utf-8"); return@use }
                     val f = HashMap<String, MutableList<String>>()
                     for (kv in String(buf, 0, r).split("&")) {
                         val q = kv.split("=", limit = 2)
@@ -1801,6 +1986,8 @@ EG.forEach(add);if(!EG.length)add({})
                         }
                         send(page("Saved. Loading on TV..."))
                     }
+                } else if (path.startsWith("/favs")) {
+                    send(favsPage())
                 } else if (path.startsWith("/backup")) {
                     send(backupJson(), "application/json; charset=utf-8", "Content-Disposition: attachment; filename=\"litetv-backup.json\"\r\n")
                 } else send(if (epgPg) epgPage(null) else page(if (path.contains("restored")) "Backup restored. Loading on TV..." else null))
@@ -1812,7 +1999,7 @@ EG.forEach(add);if(!EG.length)add({})
         startServer()
         val ip = localIp(); val url = ip?.let { "http://$it:$PORT" }
         val views = ArrayList<View>()
-        views.add(TextView(this).apply { text = if (url != null) "Scan with your phone to manage playlists and EPGs, or open\n$url" else "No network"; textSize = 18f; setTextColor(0xFFB8BECC.toInt()) })
+        views.add(TextView(this).apply { text = if (url != null) "Scan with your phone to manage playlists, EPGs and favorites order, or open\n$url" else "No network"; textSize = 18f; setTextColor(0xFFB8BECC.toInt()) })
         if (url != null) views.add(ImageView(this).apply { setImageBitmap(qr(url)) })
         val d = showPanel("Playlist & EPG Setup", views, listOf(
             DBtn("Close", C_FIELD) { it.dismiss() },
