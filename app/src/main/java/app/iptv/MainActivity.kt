@@ -60,8 +60,54 @@ fun blend(a: Int, b: Int, f: Float): Int {
     return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
 }
 
-// tvg-id matching: "YleTV1.fi@SD" -> "yletv1fi" (drops everything from @, ignores case, dots, spaces, dashes)
-fun normId(s: String): String = s.substringBefore('@').lowercase().filter { it.isLetterOrDigit() }
+// ---- tvg-id matching ----
+// The playlist (iptv-org) and the guide (epgshare01) name the same channel differently, e.g.
+//   playlist  Nickelodeon.us@East        guide  Nickelodeon.HD.us2
+//   playlist  ABC.us@WMURTV              guide  WMUR-DT.us_locals1
+// Both sides are turned into the same simple key: name (without HD / SD, without -DT / -TV endings) + country code.
+//   Nickelodeon.us@East -> "nickelodeonus"      Nickelodeon.HD.us2 -> "nickelodeonus"
+// A playlist channel can have a second key built from the call sign after the "@":
+//   ABC.us@WMURTV -> "wmurus"                   WMUR-DT.us_locals1 -> "wmurus"
+val Q_WORDS = setOf("hd", "sd", "fhd", "uhd", "4k", "hevc")
+val FEED_WORDS = setOf("sd", "hd", "fhd", "uhd", "4k", "east", "west", "eastern", "western", "pacific", "central", "mountain", "north", "south", "feed", "backup", "alt", "plus1", "plus2", "us", "uk")
+val RE_SUFFIX = Regex("-(dt|tv|hd|sd|ld|cd|lp|fm)\\d*$")
+val RE_TAIL = Regex("(dt|tv|hd|sd|ld|cd|lp)\\d*$")
+val RE_CTRY = Regex("^([a-z]{2})(?![a-z])")
+
+// a piece of an id without dashes suffix and symbols: "wmur-dt" -> "wmur"
+fun cleanName(s: String): String = s.lowercase().replace(RE_SUFFIX, "").filter { it.isLetterOrDigit() }
+
+// "us2" / "us_locals1" / "us" -> "us"; anything that does not start with a 2 letter code -> ""
+fun ctryOf(part: String): String = RE_CTRY.find(part.lowercase())?.groupValues?.get(1) ?: ""
+
+// one id (without any "@" part) -> key
+fun idKey(raw: String): String {
+    val all = raw.lowercase().split('.').filter { it.isNotEmpty() }
+    if (all.isEmpty()) return ""
+    val ps = all.filter { it !in Q_WORDS }.ifEmpty { all }
+    if (ps.size == 1) return cleanName(ps[0])
+    val c = ctryOf(ps.last())
+    val nameParts = if (c.isNotEmpty()) ps.dropLast(1) else ps
+    return nameParts.joinToString("") { cleanName(it) } + c
+}
+
+// every key a playlist channel can be found under, best first
+fun idKeys(id: String): List<String> {
+    val out = ArrayList<String>()
+    val before = id.substringBefore('@')
+    val k1 = idKey(before); if (k1.isNotEmpty()) out.add(k1)
+    if ('@' in id) {
+        val t = id.substringAfter('@').lowercase().filter { it.isLetterOrDigit() }
+        if (t.isNotEmpty() && t !in FEED_WORDS) {
+            var call = t.replace(RE_TAIL, ""); if (call.length < 3) call = t
+            val parts = before.lowercase().split('.').filter { it.isNotEmpty() }
+            val c = if (parts.size > 1) ctryOf(parts.last()) else ""
+            val k2 = call + c
+            if (k2.isNotEmpty() && k2 !in out) out.add(k2)
+        }
+    }
+    return out
+}
 
 // ---- seasonal decorations: picked from the date, moving holidays (Easter, Thanksgiving, Advent) are calculated ----
 const val SE_PARTY = 1; const val SE_HEART = 2; const val SE_FLAG_EE = 3; const val SE_BUN = 4; const val SE_WILLOW = 5; const val SE_EGG = 6
@@ -974,9 +1020,13 @@ class MainActivity : Activity() {
     var epgHours = 12; var epgDaysN = 7; var daysDirty = false   // settings: refresh every N hours (0 = by hand), keep N days
     @Volatile var scope: List<String> = emptyList()    // which guide files are in view: the active playlist's, or all of them while favorites / search results are shown
     @Volatile var epgVer = 0                           // goes up whenever the guide data or the scope changes
-    val progCache = android.util.LruCache<String, List<Prog>>(60)   // channel -> its programmes (read from the database on first use)
+    val progCache = android.util.LruCache<String, List<Prog>>(60)   // channel id -> its programmes (read from the database on first use)
     val descCache = android.util.LruCache<String, String>(40)       // descriptions of far-away programmes, read on demand
+    val keyCache = java.util.concurrent.ConcurrentHashMap<String, List<String>>()   // channel id -> the guide keys it can be found under
+    val hitKey = java.util.concurrent.ConcurrentHashMap<String, String>()           // channel id -> the guide key that really had programmes
     @Volatile var epgBusy = false
+    val epgJobs = java.util.concurrent.atomic.AtomicInteger()   // how many guide updates are running right now (0 = idle)
+    @Volatile var epgNow = ""; @Volatile var epgCnt = 0; @Volatile var epgDoneAt = 0L; @Volatile var epgFailed = false   // what Settings shows under "Update EPG now"
     @Volatile var endCache = 0L; @Volatile var endVer = -1
     var exiting = false
     val loading: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -1127,6 +1177,7 @@ class MainActivity : Activity() {
             }.apply { start() }
         }.forEach { it.join() }
         val what = if (pre == "l") "playlist" else "EPG"
+        if (pre == "e" && fails.get() > 0) epgFailed = true
         if (fails.get() > 0) runOnUiThread { Toast.makeText(this, "${fails.get()} $what source(s) failed", Toast.LENGTH_LONG).show() }
         return files.filter { it.exists() }
     }
@@ -1159,18 +1210,26 @@ class MainActivity : Activity() {
     // the guide data or the scope changed: forget what was read, redraw
     fun epgChanged() {
         scope = scopeNow(); epgVer++
-        progCache.evictAll(); descCache.evictAll(); ui.postInvalidate()
+        progCache.evictAll(); descCache.evictAll(); hitKey.clear(); ui.postInvalidate()
     }
 
     fun syncScope() { if (scopeNow() != scope) epgChanged() }
 
-    // programmes of one channel (all days kept), read from the database the first time and then remembered for a while
+    // the guide keys a playlist channel can be found under (best first), see idKeys at the top of the file
+    fun keysOf(c: Ch): List<String> = keyCache.getOrPut(c.id) { idKeys(c.id) }
+
+    // programmes of one channel (all days kept), read from the database the first time and then remembered for a while;
+    // the channel's keys are tried one after the other until one of them has programmes
     fun progsOf(c: Ch): List<Prog> {
-        val k = normId(c.id); if (k.isEmpty()) return emptyList()
-        progCache.get(k)?.let { return it }
+        val ks = keysOf(c); if (ks.isEmpty()) return emptyList()
+        progCache.get(c.id)?.let { return it }
         val sc = scope; if (sc.isEmpty()) return emptyList()
-        val v = epgVer; val l = queryProgs(k, sc)
-        if (v == epgVer) progCache.put(k, l)
+        val v = epgVer; var l: List<Prog> = emptyList()
+        for (k in ks) {
+            l = queryProgs(k, sc)
+            if (l.isNotEmpty()) { hitKey[c.id] = k; break }
+        }
+        if (v == epgVer) progCache.put(c.id, l)
         return l
     }
 
@@ -1189,13 +1248,14 @@ class MainActivity : Activity() {
 
     fun descOf(c: Ch, p: Prog): String {
         if (p.desc.isNotEmpty()) return p.desc
-        val k = normId(c.id) + "|" + p.start
+        val gk = hitKey[c.id] ?: keysOf(c).firstOrNull() ?: return ""
+        val k = gk + "|" + p.start
         descCache.get(k)?.let { return it }
         val sc = scope; var d = ""
         if (sc.isNotEmpty()) {
             try {
                 val sql = "SELECT d FROM p WHERE ch = ? AND s = ${p.start} AND src IN (" + sc.joinToString(",") { "?" } + ") LIMIT 1"
-                epgDb.rawQuery(sql, (listOf(normId(c.id)) + sc).toTypedArray()).use { cur -> if (cur.moveToFirst()) d = cur.getString(0) ?: "" }
+                epgDb.rawQuery(sql, (listOf(gk) + sc).toTypedArray()).use { cur -> if (cur.moveToFirst()) d = cur.getString(0) ?: "" }
             } catch (e: Exception) {}
         }
         descCache.put(k, d)
@@ -1218,12 +1278,12 @@ class MainActivity : Activity() {
         return m
     }
 
-    // ids of every channel of every playlist that uses this guide file: only those programmes are stored
+    // keys of every channel of every playlist that uses this guide file: only those programmes are stored
     fun wantedIds(u: String): HashSet<String> {
         val out = HashSet<String>()
         for (s in sources.toList()) if (u in epgUrls(s)) {
             val l = chCache[s.id] ?: try { loadPlaylist(s, false) } catch (e: Exception) { emptyList() }
-            for (c in l) out.add(normId(c.id))
+            for (c in l) out.addAll(keysOf(c))
         }
         return out
     }
@@ -1231,13 +1291,14 @@ class MainActivity : Activity() {
     // reads one downloaded guide file straight into the database (nothing is collected in RAM); skipped when it was already imported
     fun importEpg(u: String, f: File) {
         val key = hx(u); val keep = wantedIds(u)
-        val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}"
+        val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k2"   // k2 = matching rules version (a new version re-imports the file once)
         if (prefs.getString("imp_$key", "") == mark) return
         val lo = dayStart(); val hi = lo + epgDaysN * 86400000L
         val fz = SimpleDateFormat("yyyyMMddHHmmss Z", java.util.Locale.US); val fl = SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
         fun pt(s: String?): Long { val d = (s ?: "").trim(); return (if (d.length > 14) fz.parse(d) else fl.parse(d))!!.time }
         var n = 0; var bad = false
         val db = epgDb
+        val kc = HashMap<String, String>()   // guide channel id -> its key (so the key is only worked out once per channel, not once per programme)
         val st = db.compileStatement("INSERT INTO p(src, ch, s, e, t, d) VALUES(?, ?, ?, ?, ?, ?)")
         db.beginTransaction()
         try {
@@ -1252,7 +1313,8 @@ class MainActivity : Activity() {
                         when (p.name) {
                             "programme" -> {
                                 ti = ""; de = ""
-                                val raw = normId(p.getAttributeValue(null, "channel") ?: "")
+                                val attr = p.getAttributeValue(null, "channel") ?: ""
+                                val raw = kc.getOrPut(attr) { idKey(attr) }
                                 ch = if (raw.isNotEmpty() && (keep.isEmpty() || raw in keep)) raw else ""   // channels that are in none of your playlists are skipped
                                 if (ch.isNotEmpty()) {
                                     try { s = pt(p.getAttributeValue(null, "start")); e = pt(p.getAttributeValue(null, "stop")); if (!(e > lo && s < hi)) ch = "" } catch (x: Exception) { ch = "" }
@@ -1264,6 +1326,7 @@ class MainActivity : Activity() {
                     } else if (ev == XmlPullParser.END_TAG && p.name == "programme" && ch.isNotEmpty()) {
                         st.clearBindings(); st.bindString(1, key); st.bindString(2, ch); st.bindLong(3, s); st.bindLong(4, e); st.bindString(5, ti); st.bindString(6, de)
                         st.executeInsert(); n++; ch = ""
+                        if (n % 2000 == 0) { epgCnt = n; ui.postInvalidate() }
                     }
                     ev = p.next()
                 }
@@ -1274,15 +1337,39 @@ class MainActivity : Activity() {
         if (!bad) prefs.edit().putString("imp_$key", mark).apply()
     }
 
-    // downloads the guide files when they are older than the refresh setting (or when forced), then imports them
+    // downloads the guide files when they are older than the refresh setting (or when forced), then imports them;
+    // while it runs, Settings shows what it is doing (epgNow), and when everything is finished it shows "EPG up to date"
     fun ensureEpg(urls: List<String>, force: Boolean, download: Boolean = true) {
         if (urls.isEmpty()) return
-        val dl = urls.filter { force || !epgAt.containsKey(it) }
-        if (download && dl.isNotEmpty()) fetch(dl, "e", force, epgMaxAge())
-        for (u in urls) synchronized(lk("e" + u)) {
-            val f = File(filesDir, "e" + hx(u))
-            if (f.exists()) { importEpg(u, f); epgAt[u] = f.lastModified() }
+        if (epgJobs.getAndIncrement() == 0) epgFailed = false
+        epgNow = "Starting..."; epgCnt = 0; ui.postInvalidate()
+        try {
+            val dl = urls.filter { force || !epgAt.containsKey(it) }
+            if (download && dl.isNotEmpty()) {
+                epgNow = if (dl.size == 1) "Downloading EPG..." else "Downloading ${dl.size} EPG files..."; ui.postInvalidate()
+                fetch(dl, "e", force, epgMaxAge())
+            }
+            urls.forEachIndexed { idx, u ->
+                synchronized(lk("e" + u)) {
+                    val f = File(filesDir, "e" + hx(u))
+                    if (f.exists()) {
+                        epgNow = if (urls.size == 1) "Reading EPG..." else "Reading EPG ${idx + 1} of ${urls.size}..."; epgCnt = 0; ui.postInvalidate()
+                        importEpg(u, f); epgAt[u] = f.lastModified()
+                    }
+                }
+            }
+        } finally {
+            if (epgJobs.decrementAndGet() == 0) { epgDoneAt = System.currentTimeMillis(); epgNow = ""; epgCnt = 0 }
+            ui.postInvalidate()
         }
+    }
+
+    // the grey line under "Update EPG now" in Settings
+    fun epgStatus(): String = when {
+        epgJobs.get() > 0 -> epgNow.ifEmpty { "Updating EPG..." } + (if (epgCnt > 0) "  \u00b7  $epgCnt programmes" else "")
+        epgFailed -> "Some EPG downloads failed. OK tries again"
+        epgDoneAt > 0 -> "EPG up to date (updated ${hm.format(epgDoneAt)})"
+        else -> "Download the EPG again right now"
     }
 
     // loads every other playlist and its guide in the background so switching playlists is instant
@@ -1319,7 +1406,7 @@ class MainActivity : Activity() {
             try {
                 Thread.currentThread().priority = Thread.MIN_PRIORITY
                 ensureEpg(old, true); epgChanged()
-                if (force) runOnUiThread { Toast.makeText(this, "Guide updated", Toast.LENGTH_SHORT).show() }
+                if (force) runOnUiThread { Toast.makeText(this, "EPG updated", Toast.LENGTH_SHORT).show() }
             } catch (e: Exception) {} finally { epgBusy = false }
         }.start()
     }
@@ -1664,7 +1751,7 @@ class MainActivity : Activity() {
         "Seasonal decorations" to (if (seasonOn) "On" else "Off"),
         "Guide refresh" to (if (epgHours <= 0) "Manual only" else "Every $epgHours hours"),
         "Guide length" to "$epgDaysN days",
-        "Update guide now" to "",
+        "Update EPG now" to "",
         "Favorites sort" to FAV_SORTS[favSort],
         "Within groups" to FAV_INNER[favInner],
         "Reorder groups" to "",
@@ -1680,7 +1767,7 @@ class MainActivity : Activity() {
         2 -> "Holiday icons next to the selected row"
         3 -> "How often the TV guide updates itself"
         4 -> "How many days of programmes to keep"
-        5 -> "Download the TV guide again right now"
+        5 -> epgStatus()
         6 -> when (favSort) {
             0 -> "Grouped by category, in the order you choose"
             1 -> "In the order you added them"
@@ -1718,7 +1805,7 @@ class MainActivity : Activity() {
                 val k = DAYS_OPTS.indexOf(epgDaysN).let { if (it < 0) 3 else it }
                 epgDaysN = DAYS_OPTS[(k + d + DAYS_OPTS.size) % DAYS_OPTS.size]; prefs.edit().putInt("epgD", epgDaysN).apply(); daysDirty = true
             }
-            5 -> if (d > 0) { Toast.makeText(this, "Updating guide...", Toast.LENGTH_SHORT).show(); checkEpg(true) }
+            5 -> if (d > 0) { if (epgJobs.get() > 0) Toast.makeText(this, "EPG is already updating", Toast.LENGTH_SHORT).show() else checkEpg(true) }
             6 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
             7 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
             8 -> if (favSort == 0 && d > 0) ui.openFavGroups()
@@ -2242,7 +2329,7 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
     // pressing Home: give back the memory that is only a cache (logos, programmes read for the screen); they are re-read when needed
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) { logos.evictAll(); progCache.evictAll(); descCache.evictAll() }
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) { logos.evictAll(); progCache.evictAll(); descCache.evictAll(); hitKey.clear() }
     }
     override fun onDestroy() {
         super.onDestroy(); player.release()
