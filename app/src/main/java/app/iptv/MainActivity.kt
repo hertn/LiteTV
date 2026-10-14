@@ -215,6 +215,7 @@ class Banner(ctx: Context, val a: MainActivity) : View(ctx) {
 
 class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val d = ctx.resources.displayMetrics.density
+    val fs: Float get() = a.fontScale   // text size setting (Settings > Font size); only text is scaled, not the layout
     val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
     val tp = TextPaint(Paint.ANTI_ALIAS_FLAG)
     // colors come from the active theme (getters, so a theme change shows up on the next redraw)
@@ -255,13 +256,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun chAt(i: Int): Ch? = a.shown.getOrNull(i)
 
     fun txt(c: Canvas, s: String, x: Float, y: Float, maxW: Float, sp: Float, color: Int, bold: Boolean = false, center: Boolean = false) {
-        tp.textSize = sp * d; tp.color = color; tp.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        tp.textSize = sp * d * fs; tp.color = color; tp.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         tp.textAlign = if (center) Paint.Align.CENTER else Paint.Align.LEFT
         c.drawText(TextUtils.ellipsize(s, tp, maxOf(1f, maxW), TextUtils.TruncateAt.END).toString(), x, y, tp)
     }
     // like txt, but the selected item scrolls sideways (after 1 s without moving) when the text is too long
     fun stxt(c: Canvas, s: String, x: Float, y: Float, maxW: Float, sp: Float, color: Int, bold: Boolean, sel: Boolean, center: Boolean = false) {
-        tp.textSize = sp * d; tp.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        tp.textSize = sp * d * fs; tp.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         val tw = tp.measureText(s)
         if (!sel || tw <= maxW) { txt(c, s, if (center) x + maxW / 2 else x, y, maxW, sp, color, bold, center); return }
         val el = SystemClock.uptimeMillis() - selSince - 1000; val over = tw - maxW
@@ -291,7 +292,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
     // option tiles are as wide as their text needs (long ones wrap onto two lines)
     fun optBar(c: Canvas, x: Float, y: Float, w: Float, h: Float, labels: List<String>) {
-        tp.textSize = 17 * d; tp.typeface = Typeface.DEFAULT_BOLD
+        tp.textSize = 17 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD
         val pad = 22 * d; val cap = w * 0.38f
         val lines = labels.map { s -> if (tp.measureText(s) + 2 * pad <= cap) listOf(s) else split2(s) }
         val ws = lines.map { ls -> (ls.maxOf { tp.measureText(it) } + 2 * pad).coerceIn(110 * d, cap) }
@@ -308,8 +309,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
     }
     // time / date / playlist bar: sits below the options bar with a gap, in the same near-black as the panels
+    // 3rd chip of the time/date bar: favorites and search mix playlists, so show where the selected channel comes from; otherwise the active playlist
+    fun srcName(ch: Ch?): String =
+        if (a.multi()) (ch?.let { k -> a.sources.find { it.id == k.src }?.name } ?: "") else (a.sources.getOrNull(a.act)?.name ?: "")
+
     fun chips(c: Canvas, items: List<String>, x: Float, right: Boolean) {
-        tp.textSize = 14 * d; tp.typeface = Typeface.DEFAULT_BOLD; val pad = 12 * d
+        tp.textSize = 14 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD; val pad = 12 * d
         val ws = items.map { tp.measureText(it) + 2 * pad }; val tot = ws.sum()
         val gap = 6 * d; val y = rowH() * (S + 1) + gap; val hh = (height - y - gap).coerceIn(16 * d, 30 * d)
         var cx = if (right) x - tot else x
@@ -388,7 +393,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         a.shown.getOrNull(sel)?.let { optBar(c, lw, S * rh, w - lw, rh, a.chOptions(it)) }
         val now = System.currentTimeMillis()
-        chips(c, listOf(a.hm.format(now), a.dm.format(now), a.sources.getOrNull(a.act)?.name ?: ""), lw + 8 * d, false)
+        chips(c, listOf(a.hm.format(now), a.dm.format(now), srcName(a.shown.getOrNull(sel))).filter { it.isNotEmpty() }, lw + 8 * d, false)
         chips(c, listOf(a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"), w - 8 * d, true)
         a.season().let { if (it != 0 && a.shown.isNotEmpty()) deco(c, it, -rh * 0.14f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
@@ -430,13 +435,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             txt(c, pr.title, bx + 24 * d, by + 42 * d, bw - 48 * d, 22f, -1, true)
             val ds = if (ch != null) a.descOf(ch, pr) else pr.desc
             if (ds.isNotEmpty()) {
-                tp.textSize = 15 * d; tp.color = 0xFFD5DAE6.toInt(); tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
+                tp.textSize = 15 * d * fs; tp.color = 0xFFD5DAE6.toInt(); tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
                 val sl = StaticLayout(ds, tp, (bw - 48 * d).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.15f, 0f, false)
                 c.save(); c.clipRect(bx, by + 56 * d, bx + bw, by + bh - 10 * d); c.translate(bx + 24 * d, by + 62 * d); sl.draw(c); c.restore()
             }
         }
         if (ch != null && col == 2) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch))   // only once the programme column is selected
-        chips(c, listOf(a.hm.format(now), a.dm.format(now), a.sources.getOrNull(a.act)?.name ?: ""), bx, false)
+        chips(c, listOf(a.hm.format(now), a.dm.format(now), srcName(ch)).filter { it.isNotEmpty() }, bx, false)
         val sx = when (col) { 0 -> 0f; 1 -> dw; else -> px }   // the column the selector border is on
         a.season().let { if (it != 0 && ch != null) deco(c, it, if (sx > 0f) sx - rh * 0.1f else 0f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
@@ -449,7 +454,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val labels = listOf("Audio", "Subtitles", "Aspect ratio"); var x = logoW
         for (i in 0..2) {
             val (opts, cs) = a.subOpts(i)
-            tp.textSize = 17 * d; tp.typeface = Typeface.DEFAULT_BOLD
+            tp.textSize = 17 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD
             val tw = (maxOf(opts.maxOf { tp.measureText(it) }, tp.measureText(labels[i])) + 40 * d).coerceIn(w * 0.14f, w * 0.30f)
             val v = if (subOpen && i == subI) opts.getOrElse(oj) { "" } else opts.getOrElse(cs) { "" }
             fill(c, x, y, tw - 2, rh - 2, if (i == subI) PUR else TILE)
@@ -654,7 +659,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         p.color = -1; p.shader = menuShader; c.drawRect(0f, 0f, w * 0.62f, h, p); p.shader = null
         val ms = h * 0.085f; drawMark(c, w * 0.05f, h * 0.045f, ms)
-        val lx = w * 0.05f + ms + 14 * d; tp.textSize = 26 * d; tp.typeface = Typeface.DEFAULT_BOLD
+        val lx = w * 0.05f + ms + 14 * d; tp.textSize = 26 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD
         val lite = tp.measureText("Lite"); txt(c, "Lite", lx, h * 0.045f + ms * 0.68f, w * 0.2f, 26f, -1, true); txt(c, "TV", lx + lite, h * 0.045f + ms * 0.68f, w * 0.2f, 26f, LAV, true)
         val items = a.menuItems(); val step = h * 0.0835f
         items.forEachIndexed { i, it ->
@@ -666,24 +671,44 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
 
     // settings panel (mode 8): one row per setting, LEFT / RIGHT or OK changes it
+    // settings: sections with a thin divider, every row = title + value on one line and a short grey explanation underneath
     fun drawSettings(c: Canvas, w: Float, h: Float) {
-        val pw = w * 0.42f; val rh = h / 11f
+        val pw = w * 0.46f; val hh = h * 0.065f; val sh = h * 0.045f
         fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
-        txt(c, "SETTINGS", 20 * d, rh * 0.62f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
+        txt(c, "SETTINGS", 20 * d, hh * 0.68f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
         val items = a.settingsItems()
+        val nSec = items.indices.count { a.settingSection(it) != null }
+        val ih = minOf(h * 0.072f, (h * 0.86f - hh - nSec * sh) / items.size)   // rows shrink a little if there are many
+        var y = hh
         items.forEachIndexed { i, row ->
-            val y = rh * (i + 1); val on = i == setSel
-            if (on) fill(c, 0f, y, pw - 2, rh - 2, PUR)
-            val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
-            txt(c, row.first, 20 * d, y + rh * 0.62f, pw * 0.5f, 18f, if (en) -1 else 0x88FFFFFF.toInt(), on)
-            if (row.second.isNotEmpty()) {
-                tp.textSize = 17 * d; tp.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.color = if (!en) 0x88FFFFFF.toInt() else if (on) -1 else GRAY; tp.textAlign = Paint.Align.RIGHT
-                val v = if (on && en && (i in 1..3 || i == 5 || i == 6)) "<  ${row.second}  >" else row.second
-                c.drawText(TextUtils.ellipsize(v, tp, pw * 0.45f, TextUtils.TruncateAt.END).toString(), pw - 20 * d, y + rh * 0.62f, tp)
+            a.settingSection(i)?.let { sec ->
+                txt(c, sec, 20 * d, y + sh * 0.70f, pw - 40 * d, 12f, LAV, true)
+                fill(c, 20 * d, y + sh * 0.86f, pw - 40 * d, 1f, 0x33FFFFFF)
+                y += sh
             }
+            val on = i == setSel; val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
+            if (on) fill(c, 0f, y, pw - 2, ih - 2, PUR)
+            val tc = if (en) -1 else 0x66FFFFFF
+            txt(c, row.first, 20 * d, y + ih * 0.42f, pw * 0.55f, 17f, tc, on)
+            txt(c, a.settingDesc(i), 20 * d, y + ih * 0.80f, pw - 40 * d, 12f, if (!en) 0x55FFFFFF else if (on) 0xCCFFFFFF.toInt() else GRAY)
+            if (row.second.isNotEmpty() || (on && en && i in 1..4)) {
+                tp.textSize = 16 * d * fs; tp.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.color = if (!en) 0x66FFFFFF else if (on) -1 else GRAY; tp.textAlign = Paint.Align.RIGHT
+                val v = if (on && en && (i in 1..4 || i == 6 || i == 7)) "<  ${row.second}  >" else if (on && en && i == 0) "${row.second}  >" else row.second
+                c.drawText(TextUtils.ellipsize(v, tp, pw * 0.40f, TextUtils.TruncateAt.END).toString(), pw - 20 * d, y + ih * 0.42f, tp)
+            }
+            y += ih
         }
-        txt(c, "LEFT / RIGHT  change     OK  select     BACK  close", 20 * d, rh * (items.size + 1.8f), pw - 40 * d, 14f, GRAY)
-        txt(c, "LiteTV ${a.verLabel}", 20 * d, h - 16 * d, pw - 40 * d, 14f, GRAY)
+        // the hint only lists the buttons that do something different on the selected row (OK does the same as RIGHT on a < > row, so it is not mentioned there)
+        val hint = when {
+            !a.settingEnabled(setSel) -> "BACK  close"
+            setSel == 0 -> "OK  open themes     BACK  close"
+            setSel == 5 -> "OK  update now     BACK  close"
+            setSel == 8 -> "OK  open     BACK  close"
+            setSel == 9 -> when (a.updState) { 3 -> "OK  download     BACK  close"; 5 -> "OK  install     BACK  close"; 1, 4 -> "BACK  close"; else -> "OK  check for update     BACK  close" }
+            else -> "LEFT / RIGHT  change     BACK  close"
+        }
+        txt(c, hint, 20 * d, h - 38 * d, pw - 40 * d, 13f, GRAY)
+        txt(c, "LiteTV ${a.verLabel}", 20 * d, h - 14 * d, pw - 40 * d, 9f, 0xFF6A6A72.toInt())
     }
 
     // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
@@ -782,13 +807,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         txt(c, "${ch.num}: ${ch.name}", x, h * 0.37f, w * 0.55f, 22f, -1, true)
         var tx = x
         for (t in listOfNotNull(ch.group.takeIf { it.isNotEmpty() }, if (pr != null && now >= pr.start && now < pr.stop) "Live" else null)) {
-            tp.textSize = 16 * d; tp.typeface = Typeface.DEFAULT_BOLD; val tw = tp.measureText(t) + 28 * d
+            tp.textSize = 16 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD; val tw = tp.measureText(t) + 28 * d
             fill(c, tx, h * 0.40f, tw, 34 * d, withAlpha(T.tint, 0xCC)); txt(c, t, tx + 14 * d, h * 0.40f + 24 * d, tw, 16f, -1, true); tx += tw + 10 * d
         }
         if (pr != null) {
             val ds = a.descOf(ch, pr)
             if (ds.isNotEmpty()) {
-                tp.textSize = 19 * d; tp.color = -1; tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
+                tp.textSize = 19 * d * fs; tp.color = -1; tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
                 val sl = StaticLayout(ds, tp, (w * 0.55f).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, false)
                 c.save(); c.clipRect(x, h * 0.48f, x + w * 0.56f, h * 0.70f); c.translate(x, h * 0.48f); sl.draw(c); c.restore()
             }
@@ -921,11 +946,14 @@ class MainActivity : Activity() {
     lateinit var player: ExoPlayer; lateinit var prefs: SharedPreferences
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
-    var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false; val nOpts = 6
+    var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false; val nOpts = 5
     val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false
     val favSeq = java.util.concurrent.CopyOnWriteArrayList<String>()          // favorite urls in the order they were added
     val favGroupOrder = java.util.concurrent.CopyOnWriteArrayList<String>()   // your order of the favorite groups (lower-case group names)
     var favSort = 0; var favInner = 2                                          // favorites sort mode, and the sort inside a group (Custom groups mode)
+    val FONT_NAMES = arrayOf("Smaller", "Small", "Normal", "Large"); val FONT_SCALES = floatArrayOf(0.8f, 0.9f, 1f, 1.12f)
+    var fontIdx = 1                                                            // text size on the TV screens (default Small)
+    val fontScale: Float get() = FONT_SCALES[fontIdx]
     val FAV_SORTS = arrayOf("Custom groups", "Order added", "Channel number", "A to Z", "Z to A")
     val FAV_INNER = arrayOf("Order added", "Channel number", "A to Z")
     var errShown = false
@@ -1008,7 +1036,7 @@ class MainActivity : Activity() {
         Thread { try { epgDb.isOpen } catch (e: Exception) {} }.start()   // open the guide database in the background
         seasonOn = prefs.getBoolean("season", true)
         favs.addAll(prefs.getStringSet("favs", emptySet())!!); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
-        loadFavPrefs()
+        loadFavPrefs(); fontIdx = prefs.getInt("fontSize", 1).coerceIn(0, FONT_NAMES.lastIndex)
         root = FrameLayout(this); root.setBackgroundColor(C_BG)
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
         osd = TextView(this).apply { setTextColor(-1); textSize = 20f; setPadding(40, 20, 40, 20); setBackgroundColor(C_BG); visibility = View.GONE }
@@ -1501,7 +1529,7 @@ class MainActivity : Activity() {
     fun dayProgs(ch: Ch, day: Long): List<Prog> = progsOf(ch).filter { it.stop > day && it.start < day + 86400000L }
 
     // options bar next to a channel / program
-    fun chOptions(c: Ch) = listOf("Watch", "Program info", "Channel guide", "Channel settings",
+    fun chOptions(c: Ch) = listOf("Watch", "Program info", "Channel settings",
         if (c.url in favs) "Remove from favorites" else "Add to favorites", if (c.url in hidden) "Unhide channel" else "Hide channel")
 
     fun toggle(set: HashSet<String>, key: String, u: String) { if (!set.remove(u)) set.add(u); prefs.edit().putStringSet(key, HashSet(set)).apply() }
@@ -1510,10 +1538,9 @@ class MainActivity : Activity() {
         when (i) {
             0 -> { if (c == cur) { ui.close(); switchTo(c) } else play(c) }   // 1st Watch: change channel, UI stays; 2nd Watch: close UI
             1 -> ui.openInfo(c, p ?: now(c))
-            2 -> ui.openGuide(c)
-            3 -> { if (c != cur) play(c); ui.openSub() }
-            4 -> { toggleFav(c.url); selectGroup(grp, true) }
-            5 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
+            2 -> { if (c != cur) play(c); ui.openSub() }
+            3 -> { toggleFav(c.url); selectGroup(grp, true) }
+            4 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
         }
         ui.invalidate()
     }
@@ -1630,37 +1657,155 @@ class MainActivity : Activity() {
     }
 
     // settings panel rows: name to current value
+    // rows: 0 Themes, 1 Font size, 2 Seasonal decorations | 3 Guide refresh, 4 Guide length, 5 Update guide now | 6 Favorites sort, 7 Within groups, 8 Reorder groups
     fun settingsItems() = listOf(
         "Themes" to themeNames()[themeIdx.coerceIn(0, THEMES.size)],
+        "Font size" to FONT_NAMES[fontIdx],
         "Seasonal decorations" to (if (seasonOn) "On" else "Off"),
         "Guide refresh" to (if (epgHours <= 0) "Manual only" else "Every $epgHours hours"),
         "Guide length" to "$epgDaysN days",
         "Update guide now" to "",
         "Favorites sort" to FAV_SORTS[favSort],
         "Within groups" to FAV_INNER[favInner],
-        "Reorder groups" to (if (favSort == 0) "" else "Custom groups only"))
+        "Reorder groups" to "",
+        "App update" to when (updState) { 1 -> "Checking..."; 2 -> "Up to date"; 3 -> "$updTag available"; 4 -> "Downloading $updPct%"; 5 -> "Ready to install"; 6 -> "Failed"; else -> "" })
+
+    // a heading above these rows
+    fun settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 3 -> "TV GUIDE"; 6 -> "FAVORITES"; 9 -> "APP"; else -> null }
+
+    // the grey explanation under each row
+    fun settingDesc(i: Int): String = when (i) {
+        0 -> "Colour scheme of the menus and lists"
+        1 -> "Size of the text on the TV screens"
+        2 -> "Holiday icons next to the selected row"
+        3 -> "How often the TV guide updates itself"
+        4 -> "How many days of programmes to keep"
+        5 -> "Download the TV guide again right now"
+        6 -> when (favSort) {
+            0 -> "Grouped by category, in the order you choose"
+            1 -> "In the order you added them"
+            2 -> "By channel number, playlist by playlist"
+            3 -> "Alphabetical, A to Z"
+            else -> "Reverse alphabetical, Z to A"
+        }
+        7 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
+        8 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
+        else -> when (updState) {
+            1 -> "Contacting GitHub..."
+            2 -> "You have the latest version. OK checks again"
+            3 -> "OK downloads it"
+            4 -> "Please wait, this can take a minute"
+            5 -> "OK installs it, Android asks you to confirm"
+            6 -> "$updErr. OK tries again"
+            else -> "Look for a newer version on GitHub"
+        }
+    }
 
     // "Within groups" and "Reorder groups" only apply to the Custom groups sort
-    fun settingEnabled(i: Int): Boolean = if (i == 6 || i == 7) favSort == 0 else true
+    fun settingEnabled(i: Int): Boolean = if (i == 7 || i == 8) favSort == 0 else true
 
     // d = -1 (LEFT) or +1 (RIGHT / OK)
     fun settingAct(i: Int, d: Int) {
         when (i) {
             0 -> if (d > 0) ui.openThemes()
-            1 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }
-            2 -> {
+            1 -> { fontIdx = (fontIdx + d + FONT_NAMES.size) % FONT_NAMES.size; prefs.edit().putInt("fontSize", fontIdx).apply() }
+            2 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }
+            3 -> {
                 val k = REFRESH_OPTS.indexOf(epgHours).let { if (it < 0) 2 else it }
                 epgHours = REFRESH_OPTS[(k + d + REFRESH_OPTS.size) % REFRESH_OPTS.size]; prefs.edit().putInt("epgH", epgHours).apply()
             }
-            3 -> {
+            4 -> {
                 val k = DAYS_OPTS.indexOf(epgDaysN).let { if (it < 0) 3 else it }
                 epgDaysN = DAYS_OPTS[(k + d + DAYS_OPTS.size) % DAYS_OPTS.size]; prefs.edit().putInt("epgD", epgDaysN).apply(); daysDirty = true
             }
-            4 -> if (d > 0) { Toast.makeText(this, "Updating guide...", Toast.LENGTH_SHORT).show(); checkEpg(true) }
-            5 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
-            6 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
-            7 -> if (favSort == 0 && d > 0) ui.openFavGroups()
+            5 -> if (d > 0) { Toast.makeText(this, "Updating guide...", Toast.LENGTH_SHORT).show(); checkEpg(true) }
+            6 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
+            7 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
+            8 -> if (favSort == 0 && d > 0) ui.openFavGroups()
+            9 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
         }
+    }
+
+    // ---- app update from the GitHub releases of hertn/LiteTV: check the latest release, download its APK, hand it to Android's installer ----
+    @Volatile var updState = 0   // 0 not checked, 1 checking, 2 up to date, 3 update available, 4 downloading, 5 ready to install, 6 failed
+    @Volatile var updTag = ""; @Volatile var updUrl = ""; @Volatile var updPct = 0; @Volatile var updErr = ""
+    val UPDATE_API = "https://api.github.com/repos/hertn/LiteTV/releases/latest"
+
+    // "v1.2.0" -> [1, 2, 0]; anything after a "-" (like "-dev") is ignored
+    fun verParts(v: String): List<Int> = v.trim().removePrefix("v").removePrefix("V").substringBefore('-').split('.').map { x -> x.filter { it.isDigit() }.toIntOrNull() ?: 0 }
+    fun isNewer(remote: String, local: String): Boolean {
+        val r = verParts(remote); val l = verParts(local)
+        for (i in 0 until maxOf(r.size, l.size)) { val x = r.getOrElse(i) { 0 }; val y = l.getOrElse(i) { 0 }; if (x != y) return x > y }
+        return false
+    }
+    fun updRefresh() { runOnUiThread { ui.invalidate() } }
+
+    fun checkUpdate() {
+        if (updState == 1 || updState == 4) return
+        updState = 1; updRefresh()
+        Thread {
+            try {
+                val cn = java.net.URL(UPDATE_API).openConnection() as java.net.HttpURLConnection
+                cn.connectTimeout = 10000; cn.readTimeout = 10000
+                cn.setRequestProperty("Accept", "application/vnd.github+json"); cn.setRequestProperty("User-Agent", "LiteTV")
+                if (cn.responseCode != 200) throw Exception("GitHub answered ${cn.responseCode}")
+                val o = JSONObject(cn.inputStream.bufferedReader().use { it.readText() })
+                val tag = o.getString("tag_name"); val assets = o.optJSONArray("assets") ?: JSONArray()
+                var url = ""
+                for (k in 0 until assets.length()) { val ast = assets.getJSONObject(k); if (ast.getString("name").endsWith(".apk", true)) { url = ast.getString("browser_download_url"); break } }
+                val local = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+                when {
+                    !isNewer(tag, local) -> updState = 2
+                    url.isEmpty() -> { updErr = "No APK attached to $tag"; updState = 6 }
+                    else -> { updTag = tag; updUrl = url; updState = 3 }
+                }
+            } catch (e: Exception) { updErr = e.message ?: "No connection"; updState = 6 }
+            updRefresh()
+        }.start()
+    }
+
+    fun downloadUpdate() {
+        if (updState != 3) return
+        updState = 4; updPct = 0; updRefresh()
+        val url = updUrl
+        Thread {
+            try {
+                val dir = java.io.File(cacheDir, "updates").apply { mkdirs() }
+                dir.listFiles()?.forEach { it.delete() }
+                val f = java.io.File(dir, "LiteTV-update.apk")
+                val cn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                cn.connectTimeout = 15000; cn.readTimeout = 20000; cn.setRequestProperty("User-Agent", "LiteTV")
+                if (cn.responseCode != 200) throw Exception("Download failed (${cn.responseCode})")
+                val total = cn.contentLength.toLong(); var got = 0L; var last = -1
+                cn.inputStream.use { ins -> f.outputStream().use { out ->
+                    val buf = ByteArray(32768)
+                    while (true) {
+                        val n = ins.read(buf); if (n < 0) break
+                        out.write(buf, 0, n); got += n
+                        if (total > 0) { val pc = (got * 100 / total).toInt(); if (pc != last) { last = pc; updPct = pc; updRefresh() } }
+                    }
+                } }
+                if (f.length() < 100000L) throw Exception("The downloaded file looks wrong")
+                updState = 5
+            } catch (e: Exception) { updErr = e.message ?: "Download failed"; updState = 6 }
+            updRefresh()
+        }.start()
+    }
+
+    fun installUpdate() {
+        val f = java.io.File(java.io.File(cacheDir, "updates"), "LiteTV-update.apk")
+        if (!f.exists()) { updState = 3; updRefresh(); return }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                // first time only: Android wants you to allow this app to install apps
+                Toast.makeText(this, "Allow LiteTV to install apps, then go back and press OK again", Toast.LENGTH_LONG).show()
+                startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                return
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { Toast.makeText(this, "Could not open the installer: ${e.message}", Toast.LENGTH_LONG).show() }
     }
 
     fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return progsOf(c).firstOrNull { t >= it.start && t < it.stop } }
