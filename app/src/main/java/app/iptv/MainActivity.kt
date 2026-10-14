@@ -1430,11 +1430,11 @@ class MainActivity : Activity() {
         val s = sources[act]
         Thread {
             try {
-                cleanCache()
                 val all = loadPlaylist(s, refresh); val urls = epgUrls(s)
                 val ready = urls.all { epgAt.containsKey(it) }
                 val fresh = urls.all { (epgAt[it] ?: 0L) > System.currentTimeMillis() - epgMaxAge() }
                 runOnUiThread { setChannels(all, boot, keepFav); syncScope() }   // the guide already in the database shows straight away
+                cleanCache()   // only after the screen has switched: it writes to the guide database, which is locked while a guide is being imported
                 ensureEpg(urls, refresh || (ready && !fresh)); epgChanged()
                 preloadOthers(refresh)
             } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() } }
