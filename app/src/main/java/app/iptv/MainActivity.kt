@@ -3,7 +3,6 @@
 package app.iptv
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -226,6 +225,8 @@ data class DBtn(val label: String, val color: Int, val act: (android.app.Dialog)
 // settings choices: guide refresh (hours, 0 = only by hand) and guide length (days)
 val REFRESH_OPTS = intArrayOf(0, 6, 12, 24, 48)
 val DAYS_OPTS = intArrayOf(2, 3, 5, 7, 10, 14)
+val PL_OPTS = intArrayOf(0, 1, 3, 7, 14)   // playlist refresh choices in days (0 = only by hand)
+val SLEEP_OPTS = intArrayOf(0, 30, 60, 90, 120)   // sleep timer choices in minutes (0 = off)
 
 // the TV guide lives on disk in this small database (not in RAM): one row per programme
 class EpgDbHelper(ctx: Context) : SQLiteOpenHelper(ctx, "epg.db", null, 1) {
@@ -281,14 +282,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val LAVT: Int get() = T.lavT
     val dd = java.text.SimpleDateFormat("dd.MM"); val wd = java.text.SimpleDateFormat("EEE"); val wdd = java.text.SimpleDateFormat("EEE dd.MM")
     val S = 6; val dir = if (REVERSED) 1 else -1
-    // mode: 0 hidden, 1 channel list, 2 date/channel/program, 3 main menu (OK), 4 channel settings, 5 program info, 6 theme list, 7 custom theme editor, 8 settings, 9 favorite group order
+    // mode: 0 hidden, 1 channel list, 2 date/channel/program, 3 main menu (OK), 4 channel settings, 5 program info, 6 theme list, 7 custom theme editor, 8 settings, 9 favorite group order, 10 error log
     var mode = 0; var sideLvl = 0; var sideFocus = 1; var catSel = 1; var plSel = 0   // sideLvl: 0 none, 1 categories, 2 playlists + categories
     var side: Boolean
         get() = sideLvl > 0
         set(v) { if (!v) sideLvl = 0 }
-    var sel = 0; var oi = 0; var bar = false; var col = 1; var dayI = 0; var progI = 0; var menuSel = 0
+    var sel = 0; var oi = 0; var col = 1; var dayI = 0; var progI = 0; var menuSel = 0
     var subI = 0; var subOpen = false; var oj = 0
-    var themeSel = 0; var cRow = 0; var setSel = 0; var grpSel = 0; var grpGrab = false
+    var themeSel = 0; var cRow = 0; var setSel = 0; var grpSel = 0; var grpGrab = false; var logSel = 0
     var infoCh: Ch? = null; var infoProg: Prog? = null; var backMode = 1
     var selSince = SystemClock.uptimeMillis()
     var menuShader: Shader? = null; var menuShaderW = 0
@@ -383,12 +384,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         dayI = 0; progI = defProg(); touch(); invalidate()
     }
     fun show(m: Int) { mode = m; side = false; visibility = View.VISIBLE; a.banner.visibility = View.GONE; touch(); requestFocus() }
-    fun open(m: Int) { oi = 0; bar = false; col = 1; show(m); reset(false) }
+    fun open(m: Int) { oi = 0; col = 1; show(m); reset(false) }
     fun openGuide(ch: Ch) { open(2); val k = a.shown.indexOf(ch); if (k >= 0) { sel = k; progI = defProg(); invalidate() } }
     fun openMenu() { menuSel = 0; show(3); invalidate() }
     fun openThemes() { themeSel = a.themeIdx; show(6); invalidate() }
     fun openSettings() { setSel = 0; show(8); invalidate() }
     fun openFavGroups() { grpSel = 0; grpGrab = false; show(9); invalidate() }
+    fun openLog() { logSel = 0; show(10); invalidate() }
     fun openSub() { backMode = if (mode == 2) 2 else 1; subI = 0; subOpen = false; show(4); invalidate() }
     fun openInfo(ch: Ch, pr: Prog?) { backMode = if (mode == 2) 2 else 1; infoCh = ch; infoProg = pr; show(5); invalidate() }
     fun close() {
@@ -409,11 +411,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             1 -> { c.save(); c.translate(shift, 0f); drawChannels(c, w - gx, h); c.restore() }
             2 -> { val g2 = if (panels) gx else 2f; c.save(); c.translate(if (panels) shift else g2, 0f); drawGuide(c, w - g2, h); c.restore() }   // guide sits 2px from the screen edge (same gap as between channel rows)
             3 -> drawMenu(c, w, h)
-            4 -> { c.save(); c.translate(gx, 0f); drawSub(c, w - gx, h); c.restore(); postInvalidateDelayed(700) }
+            4 -> { c.save(); c.translate(gx, 0f); drawSub(c, w - gx); c.restore(); postInvalidateDelayed(700) }
             5 -> drawInfo(c, w, h)
             6, 7 -> drawThemes(c, w, h)
             8 -> drawSettings(c, w, h)
             9 -> drawFavGroups(c, w, h)
+            10 -> drawErrLog(c, w, h)
         }
         if (panels) {
             var x = 0f
@@ -437,7 +440,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             if (pr != null) { txt(c, "${a.hm.format(pr.start)} - ${a.hm.format(pr.stop)}", tx, y + rh * 0.74f, tmax, 13f, -1); progress(c, tx, y + rh * 0.84f, lw - tx - 10 * d, pr) }
             if (on) border(c, 0f, y, lw, rh)
         }
-        a.shown.getOrNull(sel)?.let { optBar(c, lw, S * rh, w - lw, rh, a.chOptions(it)) }
+        a.shown.getOrNull(sel)?.let { optBar(c, lw, S * rh, w - lw, rh, a.chOptions(it, false)) }
         val now = System.currentTimeMillis()
         chips(c, listOf(a.hm.format(now), a.dm.format(now), srcName(a.shown.getOrNull(sel))).filter { it.isNotEmpty() }, lw + 8 * d, false)
         chips(c, listOf(a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"), w - 8 * d, true)
@@ -486,14 +489,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 c.save(); c.clipRect(bx, by + 56 * d, bx + bw, by + bh - 10 * d); c.translate(bx + 24 * d, by + 62 * d); sl.draw(c); c.restore()
             }
         }
-        if (ch != null && col == 2) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch))   // only once the programme column is selected
+        if (ch != null && col == 2) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch, true))   // only once the programme column is selected
         chips(c, listOf(a.hm.format(now), a.dm.format(now), srcName(ch)).filter { it.isNotEmpty() }, bx, false)
         val sx = when (col) { 0 -> 0f; 1 -> dw; else -> px }   // the column the selector border is on
         a.season().let { if (it != 0 && ch != null) deco(c, it, if (sx > 0f) sx - rh * 0.1f else 0f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
 
     // "Channel settings": audio / subtitles / aspect tiles; OK on a tile pops its options up above it
-    fun drawSub(c: Canvas, w: Float, h: Float) {
+    fun drawSub(c: Canvas, w: Float) {
         val rh = rowH(); val lw = w * 0.31f; val logoW = lw * 0.36f; val y = S * rh
         val ch = a.cur ?: a.shown.getOrNull(sel) ?: return
         fill(c, 0f, y, logoW, rh - 2, LOGOBG); drawLogo(c, ch, 0f, y, logoW, rh); border(c, 0f, y, logoW, rh)
@@ -502,13 +505,23 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val (opts, cs) = a.subOpts(i)
             tp.textSize = 17 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD
             val tw = (maxOf(opts.maxOf { tp.measureText(it) }, tp.measureText(labels[i])) + 40 * d).coerceIn(w * 0.14f, w * 0.30f)
-            val v = if (subOpen && i == subI) opts.getOrElse(oj) { "" } else opts.getOrElse(cs) { "" }
+            val v = opts.getOrElse(cs) { "" }
             fill(c, x, y, tw - 2, rh - 2, if (i == subI) PUR else TILE)
             txt(c, v, x + 20 * d, y + rh * 0.50f, tw - 40 * d, 17f, -1, true)
             txt(c, labels[i], x + 20 * d, y + rh * 0.74f, tw - 40 * d, 13f, -1)
-            if (subOpen && i == subI) for (j in 1..4) {
-                val o = opts.getOrNull(oj + dir * j) ?: break; val oy = y - j * rh * 0.85f
-                fill(c, x, oy, tw - 2, rh * 0.85f - 2, TILE); txt(c, o, x + 20 * d, oy + rh * 0.5f, tw - 40 * d, 17f, -1, true)
+            if (subOpen && i == subI) {
+                // the popup lists the options above the tile and scrolls to keep the highlighted one in view,
+                // so every option can be reached from whichever one is selected (the tile shows the one in use, marked with a dot)
+                val n = opts.size; val vis = 5
+                val ord = if (dir == 1) oj else n - 1 - oj
+                val top = (ord - vis + 1).coerceIn(0, maxOf(0, n - vis))
+                for (j in 1..vis) {
+                    val od = top + j - 1; if (od >= n) break
+                    val k = if (dir == 1) od else n - 1 - od; val oy = y - j * rh * 0.85f
+                    fill(c, x, oy, tw - 2, rh * 0.85f - 2, if (k == oj) PUR else TILE)
+                    if (k == oj) { p.style = Paint.Style.STROKE; p.strokeWidth = 2 * d; p.color = -1; c.drawRect(x + d, oy + d, x + tw - 2 - d, oy + rh * 0.85f - 2 - d, p); p.style = Paint.Style.FILL }
+                    txt(c, (if (k == cs) "\u25CF " else "") + opts[k], x + 20 * d, oy + rh * 0.5f, tw - 40 * d, 17f, -1, true)
+                }
             }
             x += tw
         }
@@ -717,63 +730,89 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
 
     // settings panel (mode 8): one row per setting, LEFT / RIGHT or OK changes it
-    // settings: sections with a thin divider, every row = title + value on one line and a short grey explanation underneath
+    // sections have a thin divider, every row = title + value on one line and a short grey explanation underneath; the list scrolls when it is longer than the screen
     fun drawSettings(c: Canvas, w: Float, h: Float) {
-        val pw = w * 0.46f; val hh = h * 0.065f; val sh = h * 0.045f
+        val pw = w * 0.46f; val hh = h * 0.065f; val sh = h * 0.045f; val ih = h * 0.068f; val bot = h * 0.90f
         fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
         txt(c, "SETTINGS", 20 * d, hh * 0.68f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
         val items = a.settingsItems()
-        val nSec = items.indices.count { a.settingSection(it) != null }
-        val ih = minOf(h * 0.072f, (h * 0.86f - hh - nSec * sh) / items.size)   // rows shrink a little if there are many
-        var y = hh
+        val ys = FloatArray(items.size); var yy = 0f   // top of every row inside the list (a section heading sits just above its first row)
+        for (i in items.indices) { if (a.settingSection(i) != null) yy += sh; ys[i] = yy; yy += ih }
+        val scroll = maxOf(0f, ys[setSel.coerceIn(0, items.lastIndex)] + ih - (bot - hh))
+        c.save(); c.clipRect(0f, hh, pw - 2, bot); c.translate(0f, hh - scroll)
         items.forEachIndexed { i, row ->
+            val y = ys[i]
             a.settingSection(i)?.let { sec ->
-                txt(c, sec, 20 * d, y + sh * 0.70f, pw - 40 * d, 12f, LAV, true)
-                fill(c, 20 * d, y + sh * 0.86f, pw - 40 * d, 1f, 0x33FFFFFF)
-                y += sh
+                txt(c, sec, 20 * d, y - sh + sh * 0.70f, pw - 40 * d, 12f, LAV, true)
+                fill(c, 20 * d, y - sh + sh * 0.86f, pw - 40 * d, 1f, 0x33FFFFFF)
             }
             val on = i == setSel; val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
             if (on) fill(c, 0f, y, pw - 2, ih - 2, PUR)
             val tc = if (en) -1 else 0x66FFFFFF
             txt(c, row.first, 20 * d, y + ih * 0.42f, pw * 0.55f, 17f, tc, on)
             txt(c, a.settingDesc(i), 20 * d, y + ih * 0.80f, pw - 40 * d, 12f, if (!en) 0x55FFFFFF else if (on) 0xCCFFFFFF.toInt() else GRAY)
-            if (row.second.isNotEmpty() || (on && en && i in 1..4)) {
+            if (row.second.isNotEmpty()) {
                 tp.textSize = 16 * d * fs; tp.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.color = if (!en) 0x66FFFFFF else if (on) -1 else GRAY; tp.textAlign = Paint.Align.RIGHT
-                val v = if (on && en && (i in 1..4 || i == 6 || i == 7)) "<  ${row.second}  >" else if (on && en && i == 0) "${row.second}  >" else row.second
+                val v = if (on && en && a.settingArrows(i)) "<  ${row.second}  >" else if (on && en && (i == 0 || i == 13)) "${row.second}  >" else row.second
                 c.drawText(TextUtils.ellipsize(v, tp, pw * 0.40f, TextUtils.TruncateAt.END).toString(), pw - 20 * d, y + ih * 0.42f, tp)
             }
-            y += ih
         }
+        c.restore()
         // the hint only lists the buttons that do something different on the selected row (OK does the same as RIGHT on a < > row, so it is not mentioned there)
         val hint = when {
             !a.settingEnabled(setSel) -> "BACK  close"
             setSel == 0 -> "OK  open themes     BACK  close"
-            setSel == 5 -> "OK  update now     BACK  close"
-            setSel == 8 -> "OK  open     BACK  close"
-            setSel == 9 -> when (a.updState) { 3 -> "OK  download     BACK  close"; 5 -> "OK  install     BACK  close"; 1, 4 -> "BACK  close"; else -> "OK  check for update     BACK  close" }
+            setSel == 8 -> "OK  update now     BACK  close"
+            setSel == 11 || setSel == 13 -> "OK  open     BACK  close"
+            setSel == 12 -> when (a.updState) { 3 -> "OK  download     BACK  close"; 5 -> "OK  install     BACK  close"; 1, 4 -> "BACK  close"; else -> "OK  check for update     BACK  close" }
             else -> "LEFT / RIGHT  change     BACK  close"
         }
         txt(c, hint, 20 * d, h - 38 * d, pw - 40 * d, 13f, GRAY)
         txt(c, "LiteTV ${a.verLabel}", 20 * d, h - 14 * d, pw - 40 * d, 9f, 0xFF6A6A72.toInt())
     }
 
-    // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
-    fun drawFavGroups(c: Canvas, w: Float, h: Float) {
-        val names = a.favGroupNames().map { it.second }; val pw = w * 0.3f; val rh = h / 11f
-        if (names.isEmpty()) {
-            fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
-            txt(c, "FAVORITE GROUPS", 20 * d, rh * 0.62f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
-            txt(c, "No favorites yet", 20 * d, h / 2, pw - 40 * d, 18f, GRAY)
-            return
+    // error log (mode 10): the last problems since the app started, newest first; UP / DOWN scroll, OK clears the log
+    fun drawErrLog(c: Canvas, w: Float, h: Float) {
+        val pw = w * 0.62f; val rh = h / 13f; val rows = 10; val items = a.errLog.toList()
+        fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
+        txt(c, "ERROR LOG", 20 * d, rh * 0.62f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
+        if (items.isEmpty()) txt(c, "No problems since the app started", 20 * d, h / 2, pw - 40 * d, 18f, GRAY)
+        val si = logSel.coerceIn(0, maxOf(0, items.lastIndex))
+        val top = maxOf(0, minOf(si - 3, items.size - rows))
+        for (k in 0 until rows) {
+            val i = top + k; val e = items.getOrNull(i) ?: break; val y = rh * (k + 1)
+            if (i == si) fill(c, 0f, y, pw - 2, rh - 2, PUR)
+            stxt(c, e, 20 * d, y + rh * 0.62f, pw - 40 * d, 16f, -1, false, i == si)
         }
+        txt(c, if (items.isEmpty()) "BACK  close" else "UP / DOWN  scroll     OK  clear the log     BACK  close", 20 * d, h - 20 * d, pw - 40 * d, 13f, GRAY)
+    }
+
+    // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it; everything stays inside one panel
+    fun drawFavGroups(c: Canvas, w: Float, h: Float) {
+        val names = a.favGroupNames().map { it.second }; val pw = w * 0.34f; val rh = h / 13f; val rows = 8
+        fill(c, 0f, 0f, pw, h, ROW); fill(c, pw - 2, 0f, 2f, h, SEL)
+        txt(c, "FAVORITE GROUPS", 20 * d, rh * 0.62f, pw - 30 * d, 13f, 0xFF8A8A92.toInt(), true)
+        if (names.isEmpty()) { txt(c, "No favorites yet", 20 * d, h / 2, pw - 40 * d, 18f, GRAY); return }
         val si = grpSel.coerceIn(0, names.lastIndex)
-        drawPanel(c, 0f, pw, h, "Favorite groups", names, si, if (grpGrab) si else -1, true)
-        val x = pw + 24 * d; val mw = w - x - 20 * d; val y0 = rh * 1.62f; val ls = rh * 0.6f
-        txt(c, if (grpGrab) "UP / DOWN  move the group" else "UP / DOWN  choose a group", x, y0, mw, 17f, -1, true)
-        txt(c, if (grpGrab) "OK or BACK  drop it here" else "OK  grab it to move", x, y0 + ls, mw, 17f, -1, true)
-        if (!grpGrab) txt(c, "BACK  close", x, y0 + 2 * ls, mw, 17f, GRAY)
-        txt(c, if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", x, y0 + 3.6f * ls, mw, 15f, GRAY)
-        txt(c, "\"Other\" always stays last", x, y0 + 4.4f * ls, mw, 15f, GRAY)
+        val top = maxOf(0, minOf(si - 3, names.size - rows))
+        for (k in 0 until rows) {
+            val i = top + k; val lab = names.getOrNull(i) ?: break; val y = rh * (k + 1)
+            if (i == si) fill(c, 0f, y, pw - 2, rh - 2, PUR)
+            val g = grpGrab && i == si
+            stxt(c, (if (g) "\u25CF " else "   ") + lab, 20 * d, y + rh * 0.62f, pw - 34 * d, 18f, -1, g, i == si)
+        }
+        var y = rh * (rows + 1) + 16 * d; val tw = (pw - 40 * d).toInt()
+        fill(c, 20 * d, y - 8 * d, pw - 40 * d, 1f, 0x33FFFFFF)
+        fun para(s: String, sp: Float, color: Int, bold: Boolean) {
+            tp.textSize = sp * d * fs; tp.color = color; tp.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
+            val sl = StaticLayout(s, tp, tw, Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, false)
+            c.save(); c.clipRect(0f, y, pw - 2, h); c.translate(20 * d, y); sl.draw(c); c.restore(); y += sl.height + 6 * d
+        }
+        para(if (grpGrab) "UP / DOWN  move the group" else "UP / DOWN  choose a group", 15f, -1, true)
+        para(if (grpGrab) "OK or BACK  drop it here" else "OK  grab it to move", 15f, -1, true)
+        if (!grpGrab) para("BACK  close", 15f, GRAY, false)
+        para(if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", 13f, GRAY, false)
+        para("\"Other\" always stays last", 13f, GRAY, false)
     }
 
     // theme list (mode 6) or custom colour editor (mode 7), each with a live preview of the colours
@@ -786,7 +825,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val pw = w * 0.22f; val px = pw + w * 0.04f
             drawPanel(c, 0f, pw, h, "Themes", a.themeNames(), themeSel, a.themeIdx, true)
             drawPreview(c, px, py, w * 0.5f, pvh)
-            txt(c, "OK = use this theme     BACK = cancel", px, py + pvh + 32 * d, w * 0.5f, 15f, GRAY)
+            // the hint lives inside the themes panel (no text outside a panel)
+            txt(c, "OK  use this theme", 20 * d, h - 38 * d, pw - 40 * d, 13f, GRAY)
+            txt(c, "BACK  cancel", 20 * d, h - 14 * d, pw - 40 * d, 13f, GRAY)
         }
     }
 
@@ -898,13 +939,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 8 }   // back to settings, preview dropped
                 mode == 8 -> { a.settingsDone(); mode = 3 }
                 mode == 9 -> { if (grpGrab) grpGrab = false else mode = 8 }   // drop the group, then back to settings
+                mode == 10 -> mode = 8                                      // back to settings
                 mode == 7 -> mode = 6                                       // custom colours are already saved
                 else -> close()
             }
             touch(); invalidate(); return true
         }
         if (!(up || dn || lf || rt || ok)) return super.onKeyDown(k, e)
-        val mx = maxOf(0, a.shown.size - 1); val ch = a.shown.getOrNull(sel)
+        val ch = a.shown.getOrNull(sel)
         if (side) {
             val n = maxOf(1, if (sideFocus == 2) a.sources.size else a.groups.size)
             when {
@@ -924,7 +966,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 dn -> if (subOpen) oj = (oj - dir).coerceIn(0, maxOf(0, n - 1))
                 lf -> if (!subOpen) subI = maxOf(0, subI - 1)
                 rt -> if (!subOpen) subI = minOf(2, subI + 1)
-                ok -> if (subOpen) { a.subApply(subI, oj); subOpen = false } else { oj = a.subOpts(subI).second.coerceAtLeast(0); subOpen = true }
+                ok -> if (subOpen) { a.subApply(subI, oj); subOpen = false } else {
+                    val o = a.subOpts(subI)
+                    if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true } else a.flash("Only one option available", 1500)
+                }
             }
         } else if (mode == 5) {
             if (ok) { val c0 = infoCh; close(); if (c0 != null) a.play(c0) }
@@ -941,6 +986,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 }
                 ok -> if (grpSel < mv) grpGrab = !grpGrab
             }
+        } else if (mode == 10) {
+            val n = a.errLog.size
+            when { up -> logSel = maxOf(0, logSel - 1); dn -> logSel = minOf(maxOf(0, n - 1), logSel + 1); ok -> { a.errLog.clear(); logSel = 0 } }
         } else if (mode == 6) {
             val n = a.themeNames().size   // the last entry is "Custom"
             when {
@@ -964,7 +1012,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 up -> sel = wrap(sel + dir)
                 dn -> sel = wrap(sel - dir)
                 lf -> if (oi > 0) oi-- else openSide()
-                rt -> oi = minOf(oi + 1, a.nOpts - 1)
+                rt -> oi = minOf(oi + 1, a.nOpts(false) - 1)
                 ok -> if (ch != null) a.chOption(ch, oi)
             }
         } else {
@@ -979,7 +1027,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                     }
                 }
                 lf -> if (col == 2 && oi > 0) oi-- else if (col > 0) col-- else openSide()
-                rt -> if (col < 2) col++ else oi = minOf(oi + 1, a.nOpts - 1)
+                rt -> if (col < 2) col++ else oi = minOf(oi + 1, a.nOpts(true) - 1)
                 ok -> if (ch != null) a.chOption(ch, oi, dp.getOrNull(progI))
             }
         }
@@ -988,11 +1036,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 }
 
 class MainActivity : Activity() {
-    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var ui: Ui; lateinit var banner: Banner
+    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var ui: Ui; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
     lateinit var player: ExoPlayer; lateinit var prefs: SharedPreferences
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
-    var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false; val nOpts = 5
+    var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false
     val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false
     val favSeq = java.util.concurrent.CopyOnWriteArrayList<String>()          // favorite urls in the order they were added
     val favGroupOrder = java.util.concurrent.CopyOnWriteArrayList<String>()   // your order of the favorite groups (lower-case group names)
@@ -1004,6 +1052,40 @@ class MainActivity : Activity() {
     val FAV_INNER = arrayOf("Order added", "Channel number", "A to Z")
     var errShown = false
     val arNames = arrayOf("Fit", "Zoom", "Stretch")
+    // a stream that fails is retried a few times with a growing pause, then left alone until you pick the channel again
+    var retryN = 0; val MAX_RETRY = 5
+    // the last problems since the app started (newest first), shown in Settings > Error log
+    val errLog = java.util.concurrent.CopyOnWriteArrayList<String>()
+    fun logErr(m: String) {
+        synchronized(errLog) {
+            errLog.add(0, java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(System.currentTimeMillis()) + "  " + m)
+            while (errLog.size > 30) errLog.removeAt(errLog.size - 1)
+        }
+        try { ui.postInvalidate() } catch (e: Exception) {}
+    }
+    fun hostOf(u: String): String = try { URL(u).host } catch (e: Exception) { "?" }   // only the host is logged: playlist urls can contain a password
+    // buffer size: how much of a channel is loaded ahead (bigger = fewer stutters, slower channel start); changing it builds a new player when you leave Settings
+    val BUF_NAMES = arrayOf("Small", "Normal", "Large")
+    var bufIdx = 0; var bufDirty = false
+    var plDays = 7   // playlists are downloaded again when their file is older than this many days (0 = only by hand)
+    val retryRun = Runnable { if (cur != null) player.prepare() }
+    // a spinner in the middle of the screen shows when a channel is still buffering after a short moment
+    var loadingShown = false
+    val loadRun = Runnable { if (player.playbackState == Player.STATE_BUFFERING && !errShown) { loadingShown = true; spin.visibility = View.VISIBLE } }
+    fun hideLoading() { loadingShown = false; spin.visibility = View.GONE }
+    // stream errors are shown in the middle of the screen
+    val hideMsg = Runnable { msg.visibility = View.GONE }
+    fun flashMid(t: String, ms: Long) { msg.text = t; msg.visibility = View.VISIBLE; msg.removeCallbacks(hideMsg); msg.postDelayed(hideMsg, ms) }
+    fun clearMid() { msg.removeCallbacks(hideMsg); msg.visibility = View.GONE }
+    // sleep timer: closes the app after the chosen time; a warning shows 1 minute before and any button cancels it
+    var sleepMin = 0; var sleepWarned = false
+    val sleepWarn = Runnable { sleepWarned = true; flash("Sleep timer: closing in 1 minute. Press any button to cancel", 60000) }
+    val sleepRun = Runnable { if (sleepMin > 0) exitApp() }
+    fun setSleep(m: Int) {
+        pv.removeCallbacks(sleepWarn); pv.removeCallbacks(sleepRun); sleepWarned = false; sleepMin = m
+        if (m > 0) { pv.postDelayed(sleepWarn, m * 60_000L - 60_000L); pv.postDelayed(sleepRun, m * 60_000L); flash("Sleep timer: $m min", 2000) }
+        else flash("Sleep timer off", 2000)
+    }
     var themeIdx = 0   // saved theme: 0 until THEMES.size - 1 = premade, THEMES.size = Custom
     var cA = 12; var cP = 12; var cH = 12   // custom theme: swatch index of accent / panels / highlight
     val chCache = java.util.concurrent.ConcurrentHashMap<String, List<Ch>>()                              // source id -> channels
@@ -1083,6 +1165,7 @@ class MainActivity : Activity() {
         prefs = getSharedPreferences("p", 0)
         loadTheme()
         epgHours = prefs.getInt("epgH", 12); epgDaysN = prefs.getInt("epgD", 7).coerceIn(1, 30)
+        bufIdx = prefs.getInt("buf", 0).coerceIn(0, BUF_NAMES.lastIndex); plDays = prefs.getInt("plD", 7).coerceIn(0, 60)
         Thread { try { epgDb.isOpen } catch (e: Exception) {} }.start()   // open the guide database in the background
         seasonOn = prefs.getBoolean("season", true)
         favs.addAll(prefs.getStringSet("favs", emptySet())!!); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
@@ -1091,27 +1174,65 @@ class MainActivity : Activity() {
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
         osd = TextView(this).apply { setTextColor(-1); textSize = 20f; setPadding(40, 20, 40, 20); setBackgroundColor(C_BG); visibility = View.GONE }
         root.addView(osd, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        msg = TextView(this).apply {   // stream errors: in the middle of the screen
+            setTextColor(-1); textSize = 22f; gravity = Gravity.CENTER; setPadding(48, 28, 48, 28); setBackgroundColor(C_BG)
+            maxWidth = (resources.displayMetrics.widthPixels * 0.7).toInt(); visibility = View.GONE
+        }
+        root.addView(msg, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        spin = ProgressBar(this).apply { isIndeterminate = true; indeterminateTintList = android.content.res.ColorStateList.valueOf(-1); visibility = View.GONE }   // buffering circle, no text
+        val spinSize = (72 * resources.displayMetrics.density).toInt()
+        root.addView(spin, FrameLayout.LayoutParams(spinSize, spinSize, Gravity.CENTER))
         banner = Banner(this, this).apply { visibility = View.GONE }; root.addView(banner, FrameLayout.LayoutParams(-1, -1))
         ui = Ui(this, this).apply { visibility = View.GONE }; root.addView(ui, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
-        val ds = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10000)
-        player = ExoPlayer.Builder(this, DefaultRenderersFactory(this).setEnableDecoderFallback(true))
-            .setMediaSourceFactory(DefaultMediaSourceFactory(ds))
-            .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(4000, 20000, 800, 1500).build()).build()
-        pv.player = player
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()   // subtitles off by default
-        player.addListener(object : Player.Listener {
-            override fun onPlayerError(e: PlaybackException) {
-                errShown = true
-                flash((cur?.let { "${it.num}: ${it.name}  \u2013  " } ?: "") + errText(e), 8000)
-                pv.postDelayed({ if (cur != null) player.prepare() }, 2500)
-            }
-            override fun onPlaybackStateChanged(st: Int) {
-                if (st == Player.STATE_READY && errShown) { errShown = false; osd.removeCallbacks(hideOsd); osd.visibility = View.GONE }
-            }
-        })
+        player = makePlayer(); pv.player = player
         sources = readSrcs(); epgs = readEpgs()
         if (sources.isEmpty()) settings() else activate(prefs.getInt("act", 0), false, true)
+    }
+
+    fun loadControl(): DefaultLoadControl = when (bufIdx) {
+        1 -> DefaultLoadControl.Builder().setBufferDurationsMs(8000, 30000, 1500, 3000)
+        2 -> DefaultLoadControl.Builder().setBufferDurationsMs(15000, 60000, 2500, 5000)
+        else -> DefaultLoadControl.Builder().setBufferDurationsMs(4000, 20000, 800, 1500)
+    }.build()
+
+    // builds the player (the buffer size is chosen here)
+    fun makePlayer(): ExoPlayer {
+        val ds = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10000)
+        val p = ExoPlayer.Builder(this, DefaultRenderersFactory(this).setEnableDecoderFallback(true))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(ds))
+            .setLoadControl(loadControl()).build()
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()   // subtitles off by default
+        p.addListener(object : Player.Listener {
+            override fun onPlayerError(e: PlaybackException) {
+                pv.removeCallbacks(loadRun); pv.removeCallbacks(retryRun); hideLoading()
+                if (e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW && retryN < MAX_RETRY) {   // fell behind a live stream: jump back to live
+                    retryN++; player.seekToDefaultPosition(); player.prepare(); return
+                }
+                errShown = true
+                logErr((cur?.name ?: "Stream") + ": " + errText(e))
+                val head = cur?.let { "${it.num}: ${it.name}" } ?: "Stream"
+                if (retryN < MAX_RETRY) {
+                    val wait = minOf(30000L, 2500L shl retryN); retryN++
+                    flashMid("$head\n${errText(e)}\nRetry $retryN of $MAX_RETRY in ${wait / 1000} s", wait)
+                    pv.postDelayed(retryRun, wait)
+                } else flashMid("$head\n${errText(e)}\nGave up. Select the channel again to retry", 10000)
+            }
+            override fun onPlaybackStateChanged(st: Int) {
+                pv.removeCallbacks(loadRun)
+                if (st == Player.STATE_BUFFERING) { if (!errShown) pv.postDelayed(loadRun, 700) } else hideLoading()
+                if (st == Player.STATE_READY) { retryN = 0; if (errShown) { errShown = false; clearMid() } }
+            }
+        })
+        return p
+    }
+
+    // a new buffer size needs a new player: the channel that was playing starts again
+    fun rebuildPlayer() {
+        val c = cur
+        pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
+        player.release(); player = makePlayer(); pv.player = player
+        if (c != null) play(c)
     }
 
     fun open(u: String) = (URL(u).openConnection() as HttpURLConnection).apply {
@@ -1172,7 +1293,7 @@ class MainActivity : Activity() {
                 val f = files[i]
                 if (refresh || !f.exists() || System.currentTimeMillis() - f.lastModified() > maxAge) {
                     try { val t = File(f.path + ".tmp"); open(urls[i]).use { s -> t.outputStream().use { s.copyTo(it) } }; t.renameTo(f) }
-                    catch (e: Exception) { fails.incrementAndGet() }
+                    catch (e: Exception) { fails.incrementAndGet(); logErr((if (pre == "l") "Playlist" else "EPG") + " download failed (" + hostOf(urls[i]) + "): " + (e.message ?: e.javaClass.simpleName)) }
                 }
             }.apply { start() }
         }.forEach { it.join() }
@@ -1187,7 +1308,7 @@ class MainActivity : Activity() {
         if (refresh) chCache.remove(s.id)
         chCache[s.id]?.let { return@synchronized it }
         val all = ArrayList<Ch>()
-        for (f in fetch(listOf(s.m3u), "l", refresh, Long.MAX_VALUE)) {
+        for (f in fetch(listOf(s.m3u), "l", refresh, plMaxAge())) {
             val head = f.bufferedReader().use { it.readLine() } ?: ""
             val auto = Regex("(?:url-tvg|x-tvg-url)=\"([^\"]*)\"").find(head)?.groupValues?.get(1)
                 ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.joinToString(" ") ?: ""
@@ -1331,7 +1452,7 @@ class MainActivity : Activity() {
                     ev = p.next()
                 }
                 ins.close()
-            } catch (ex: Exception) { bad = true }
+            } catch (ex: Exception) { bad = true; logErr("EPG file could not be read (" + hostOf(u) + "): " + (ex.message ?: ex.javaClass.simpleName)) }
             if (!bad || n > 0) db.setTransactionSuccessful()   // a broken file with nothing readable keeps the old guide
         } finally { db.endTransaction(); st.close() }
         if (!bad) prefs.edit().putString("imp_$key", mark).apply()
@@ -1412,10 +1533,24 @@ class MainActivity : Activity() {
     }
 
     // the hourly check while the app is on screen (and once more each time you come back to it)
-    val epgTick: Runnable = object : Runnable { override fun run() { checkEpg(); pv.postDelayed(this, 3600_000L) } }
+    fun plMaxAge(): Long = if (plDays <= 0) Long.MAX_VALUE else plDays * 86400_000L
+
+    // playlists whose downloaded file is older than the Playlist refresh setting are downloaded again; only while no list is open,
+    // because the channel list is rebuilt (the other playlists follow in the background)
+    fun checkPlaylists() {
+        if (plDays <= 0 || sources.isEmpty() || ui.mode != 0 || preloading) return
+        val now = System.currentTimeMillis()
+        val old = sources.toList().filter { val f = File(filesDir, "l" + hx(it.m3u)); f.exists() && now - f.lastModified() > plMaxAge() }
+        if (old.isEmpty()) return
+        for (o in old) chCache.remove(o.id)
+        activate(act, false)
+    }
+
+    val epgTick: Runnable = object : Runnable { override fun run() { checkPlaylists(); checkEpg(); pv.postDelayed(this, 3600_000L) } }
 
     // leaving Settings: a changed guide length re-reads the files already on disk (no download)
     fun settingsDone() {
+        if (bufDirty) { bufDirty = false; rebuildPlayer() }
         if (!daysDirty) return
         daysDirty = false
         Thread {
@@ -1437,7 +1572,7 @@ class MainActivity : Activity() {
                 cleanCache()   // only after the screen has switched: it writes to the guide database, which is locked while a guide is being imported
                 ensureEpg(urls, refresh || (ready && !fresh)); epgChanged()
                 preloadOthers(refresh)
-            } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() } }
+            } catch (e: Exception) { logErr("Playlist load failed: " + (e.message ?: e.javaClass.simpleName)); runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() } }
         }.start()
     }
 
@@ -1555,15 +1690,35 @@ class MainActivity : Activity() {
         ui.reset(keep)
     }
 
-    // searches every playlist (they are all kept in memory); the guide of all playlists is merged while the results are shown
+    // SQL LIKE pattern for the typed text; % and _ are escaped so they are searched as normal characters
+    fun likeArg(q: String) = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+    // guide keys of the programmes that are on right now and have the typed text in their title (one query for every playlist's guide)
+    fun keysOnNow(q: String): HashSet<String> {
+        val out = HashSet<String>(); val now = System.currentTimeMillis()
+        val sc = sources.toList().flatMap { epgUrls(it) }.distinct().map { hx(it) }; if (sc.isEmpty()) return out
+        try {
+            val sql = "SELECT DISTINCT ch FROM p WHERE s <= $now AND e > $now AND t LIKE ? ESCAPE '\\' AND src IN (" + sc.joinToString(",") { "?" } + ")"
+            epgDb.rawQuery(sql, (listOf(likeArg(q)) + sc).toTypedArray()).use { cur -> while (cur.moveToNext()) out.add(cur.getString(0)) }
+        } catch (e: Exception) {}
+        return out
+    }
+
+    // searches every playlist (they are all kept in memory) by channel name and by the title of the show that is on now;
+    // name matches come first; the guide of all playlists is merged while the results are shown
     fun search(q: String) {
         Thread {
-            val res = ArrayList<Ch>()
+            val byName = ArrayList<Ch>(); val byShow = ArrayList<Ch>(); val seen = HashSet<String>()
+            val on = keysOnNow(q)
             for (src in sources.toList()) {
                 val l = chCache[src.id] ?: try { loadPlaylist(src, false) } catch (e: Exception) { emptyList() }
-                for (c in l) if (c.name.contains(q, true) && (showHidden || c.url !in hidden)) res.add(c)
+                for (c in l) {
+                    if (!showHidden && c.url in hidden) continue
+                    if (c.name.contains(q, true)) { if (seen.add(c.url)) byName.add(c) }
+                    else if (on.isNotEmpty() && keysOf(c).any { it in on } && seen.add(c.url)) byShow.add(c)
+                }
             }
-            runOnUiThread { searching = true; shown = res; syncScope(); ui.open(1) }
+            runOnUiThread { searching = true; shown = byName + byShow; syncScope(); ui.open(1) }
         }.start()
     }
     fun endSearch() {
@@ -1615,19 +1770,29 @@ class MainActivity : Activity() {
     }
     fun dayProgs(ch: Ch, day: Long): List<Prog> = progsOf(ch).filter { it.stop > day && it.start < day + 86400000L }
 
-    // options bar next to a channel / program
-    fun chOptions(c: Ch) = listOf("Watch", "Program info", "Channel settings",
-        if (c.url in favs) "Remove from favorites" else "Add to favorites", if (c.url in hidden) "Unhide channel" else "Hide channel")
+    // options bar next to a channel / program. ids: 0 Watch, 1 TV guide, 2 Program info, 3 Channel settings, 4 favorite, 5 hide
+    // the TV guide button is only in the channel list (LEFT); inside the guide itself it is not shown
+    fun optIds(guide: Boolean) = if (guide) listOf(0, 2, 3, 4, 5) else listOf(0, 1, 2, 3, 4, 5)
+    fun nOpts(guide: Boolean) = optIds(guide).size
+    fun chOptions(c: Ch, guide: Boolean) = optIds(guide).map { id ->
+        when (id) {
+            0 -> "Watch"; 1 -> "TV guide"; 2 -> "Program info"; 3 -> "Channel settings"
+            4 -> if (c.url in favs) "Remove from favorites" else "Add to favorites"
+            else -> if (c.url in hidden) "Unhide channel" else "Hide channel"
+        }
+    }
 
     fun toggle(set: HashSet<String>, key: String, u: String) { if (!set.remove(u)) set.add(u); prefs.edit().putStringSet(key, HashSet(set)).apply() }
 
     fun chOption(c: Ch, i: Int, p: Prog? = null) {
-        when (i) {
+        val guide = ui.mode == 2
+        when (optIds(guide).getOrNull(i)) {
             0 -> { if (c == cur) { ui.close(); switchTo(c) } else play(c) }   // 1st Watch: change channel, UI stays; 2nd Watch: close UI
-            1 -> ui.openInfo(c, p ?: now(c))
-            2 -> { if (c != cur) play(c); ui.openSub() }
-            3 -> { toggleFav(c.url); selectGroup(grp, true) }
-            4 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
+            1 -> ui.openGuide(c)
+            2 -> ui.openInfo(c, p ?: now(c))
+            3 -> { if (c != cur) play(c); ui.openSub() }
+            4 -> { toggleFav(c.url); selectGroup(grp, true) }
+            5 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
         }
         ui.invalidate()
     }
@@ -1654,22 +1819,27 @@ class MainActivity : Activity() {
     }
 
     fun subApply(i: Int, k: Int) {
-        if (i == 2) {
-            arMode = k.coerceIn(0, 2)
-            pv.resizeMode = intArrayOf(AspectRatioFrameLayout.RESIZE_MODE_FIT, AspectRatioFrameLayout.RESIZE_MODE_ZOOM, AspectRatioFrameLayout.RESIZE_MODE_FILL)[arMode]
-            return
-        }
-        val text = i == 1; val type = if (text) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
-        val b = player.trackSelectionParameters.buildUpon()
-        if (text && k == 0) b.setTrackTypeDisabled(type, true)
-        else {
-            var n = if (text) 1 else 0
-            for (g in player.currentTracks.groups) if (g.type == type) for (t in 0 until g.length) {
-                if (n == k) { b.setTrackTypeDisabled(type, false); b.setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, t)) }
-                n++
+        try {
+            if (i == 2) {
+                arMode = k.coerceIn(0, 2)
+                pv.resizeMode = intArrayOf(AspectRatioFrameLayout.RESIZE_MODE_FIT, AspectRatioFrameLayout.RESIZE_MODE_ZOOM, AspectRatioFrameLayout.RESIZE_MODE_FILL)[arMode]
+                flash("Aspect ratio: ${arNames[arMode]}", 1500)
+                return
             }
+            val text = i == 1; val type = if (text) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
+            val b = player.trackSelectionParameters.buildUpon()
+            if (text && k == 0) b.setTrackTypeDisabled(type, true)
+            else {
+                var n = if (text) 1 else 0
+                for (g in player.currentTracks.groups) if (g.type == type) for (t in 0 until g.length) {
+                    if (n == k) { b.setTrackTypeDisabled(type, false); b.setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, t)) }
+                    n++
+                }
+            }
+            player.trackSelectionParameters = b.build()
+        } catch (e: Exception) {
+            flash("Track change failed: ${e.javaClass.simpleName} ${e.message ?: ""}", 6000)
         }
-        player.trackSelectionParameters = b.build()
     }
 
     // ---- dialogs in the app's own style (dark panel, accent colour; the system keyboard still appears for typing) ----
@@ -1719,17 +1889,17 @@ class MainActivity : Activity() {
     }
 
     fun searchBox() {
-        val input = dEdit("Channel name"); var d: android.app.Dialog? = null
+        val input = dEdit("Channel or show name"); var d: android.app.Dialog? = null
         fun go() { val q = input.text.toString().trim(); d?.dismiss(); if (q.isNotEmpty()) search(q) }
         input.setOnEditorActionListener { _, _, _ -> go(); true }
-        d = showPanel("Search all playlists", listOf(input), listOf(
+        d = showPanel("Search channels and shows on now", listOf(input), listOf(
             DBtn("Cancel", C_FIELD) { it.dismiss() },
             DBtn("Search", C_PUR) { go() }), keyboard = true)
     }
 
     // main menu (OK button); the number is the icon id
     fun menuItems() = listOf(0 to "Search", 9 to "Playlists", 2 to "TV guide", 3 to "On air now", 4 to (if (showHidden) "Hide hidden" else "Show hidden"),
-        6 to "Last channel", 11 to "Settings")
+        6 to "Last channel", 11 to "Settings" + (if (updState == 3 || updState == 5) "  \u25CF" else ""))
 
     fun menuAct(i: Int) {
         when (i) {
@@ -1744,39 +1914,51 @@ class MainActivity : Activity() {
     }
 
     // settings panel rows: name to current value
-    // rows: 0 Themes, 1 Font size, 2 Seasonal decorations | 3 Guide refresh, 4 Guide length, 5 Update guide now | 6 Favorites sort, 7 Within groups, 8 Reorder groups
+    // rows: 0 Themes, 1 Font size, 2 Seasonal decorations | 3 Buffer size, 4 Sleep timer | 5 Playlist refresh, 6 Guide refresh, 7 Guide length, 8 Update EPG now
+    //       | 9 Favorites sort, 10 Within groups, 11 Reorder groups | 12 App update, 13 Error log
     fun settingsItems() = listOf(
         "Themes" to themeNames()[themeIdx.coerceIn(0, THEMES.size)],
         "Font size" to FONT_NAMES[fontIdx],
         "Seasonal decorations" to (if (seasonOn) "On" else "Off"),
+        "Buffer size" to BUF_NAMES[bufIdx],
+        "Sleep timer" to (if (sleepMin <= 0) "Off" else "$sleepMin min"),
+        "Playlist refresh" to (if (plDays <= 0) "Manual only" else if (plDays == 1) "Every day" else "Every $plDays days"),
         "Guide refresh" to (if (epgHours <= 0) "Manual only" else "Every $epgHours hours"),
         "Guide length" to "$epgDaysN days",
         "Update EPG now" to "",
         "Favorites sort" to FAV_SORTS[favSort],
         "Within groups" to FAV_INNER[favInner],
         "Reorder groups" to "",
-        "App update" to when (updState) { 1 -> "Checking..."; 2 -> "Up to date"; 3 -> "$updTag available"; 4 -> "Downloading $updPct%"; 5 -> "Ready to install"; 6 -> "Failed"; else -> "" })
+        "App update" to when (updState) { 1 -> "Checking..."; 2 -> "Up to date"; 3 -> "$updTag available"; 4 -> "Downloading $updPct%"; 5 -> "Ready to install"; 6 -> "Failed"; else -> "" },
+        "Error log" to (if (errLog.isEmpty()) "Empty" else "${errLog.size} entries"))
 
     // a heading above these rows
-    fun settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 3 -> "TV GUIDE"; 6 -> "FAVORITES"; 9 -> "APP"; else -> null }
+    fun settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 3 -> "PLAYBACK"; 5 -> "PLAYLISTS & TV GUIDE"; 9 -> "FAVORITES"; 12 -> "APP"; else -> null }
+
+    // rows that are changed with LEFT / RIGHT (shown as < value >)
+    fun settingArrows(i: Int): Boolean = i in 1..7 || i == 9 || i == 10
 
     // the grey explanation under each row
     fun settingDesc(i: Int): String = when (i) {
         0 -> "Colour scheme of the menus and lists"
         1 -> "Size of the text on the TV screens"
         2 -> "Holiday icons next to the selected row"
-        3 -> "How often the TV guide updates itself"
-        4 -> "How many days of programmes to keep"
-        5 -> epgStatus()
-        6 -> when (favSort) {
+        3 -> "Bigger = fewer stutters, slower channel start (applies when you leave Settings)"
+        4 -> "Closes the app after this time (a warning shows first)"
+        5 -> "How often the playlists are downloaded again"
+        6 -> "How often the TV guide updates itself"
+        7 -> "How many days of programmes to keep"
+        8 -> epgStatus()
+        9 -> when (favSort) {
             0 -> "Grouped by category, in the order you choose"
             1 -> "In the order you added them"
             2 -> "By channel number, playlist by playlist"
             3 -> "Alphabetical, A to Z"
             else -> "Reverse alphabetical, Z to A"
         }
-        7 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
-        8 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
+        10 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
+        11 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
+        13 -> "Recent problems since the app started"
         else -> when (updState) {
             1 -> "Contacting GitHub..."
             2 -> "You have the latest version. OK checks again"
@@ -1784,12 +1966,12 @@ class MainActivity : Activity() {
             4 -> "Please wait, this can take a minute"
             5 -> "OK installs it, Android asks you to confirm"
             6 -> "$updErr. OK tries again"
-            else -> "Look for a newer version on GitHub"
+            else -> "Looks for a newer version by itself; OK checks now"
         }
     }
 
     // "Within groups" and "Reorder groups" only apply to the Custom groups sort
-    fun settingEnabled(i: Int): Boolean = if (i == 7 || i == 8) favSort == 0 else true
+    fun settingEnabled(i: Int): Boolean = if (i == 10 || i == 11) favSort == 0 else true
 
     // d = -1 (LEFT) or +1 (RIGHT / OK)
     fun settingAct(i: Int, d: Int) {
@@ -1797,19 +1979,23 @@ class MainActivity : Activity() {
             0 -> if (d > 0) ui.openThemes()
             1 -> { fontIdx = (fontIdx + d + FONT_NAMES.size) % FONT_NAMES.size; prefs.edit().putInt("fontSize", fontIdx).apply() }
             2 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }
-            3 -> {
+            3 -> { bufIdx = (bufIdx + d + BUF_NAMES.size) % BUF_NAMES.size; prefs.edit().putInt("buf", bufIdx).apply(); bufDirty = true }
+            4 -> { val k = SLEEP_OPTS.indexOf(sleepMin).let { if (it < 0) 0 else it }; setSleep(SLEEP_OPTS[(k + d + SLEEP_OPTS.size) % SLEEP_OPTS.size]) }
+            5 -> { val k = PL_OPTS.indexOf(plDays).let { if (it < 0) 3 else it }; plDays = PL_OPTS[(k + d + PL_OPTS.size) % PL_OPTS.size]; prefs.edit().putInt("plD", plDays).apply() }
+            6 -> {
                 val k = REFRESH_OPTS.indexOf(epgHours).let { if (it < 0) 2 else it }
                 epgHours = REFRESH_OPTS[(k + d + REFRESH_OPTS.size) % REFRESH_OPTS.size]; prefs.edit().putInt("epgH", epgHours).apply()
             }
-            4 -> {
+            7 -> {
                 val k = DAYS_OPTS.indexOf(epgDaysN).let { if (it < 0) 3 else it }
                 epgDaysN = DAYS_OPTS[(k + d + DAYS_OPTS.size) % DAYS_OPTS.size]; prefs.edit().putInt("epgD", epgDaysN).apply(); daysDirty = true
             }
-            5 -> if (d > 0) { if (epgJobs.get() > 0) Toast.makeText(this, "EPG is already updating", Toast.LENGTH_SHORT).show() else checkEpg(true) }
-            6 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
-            7 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
-            8 -> if (favSort == 0 && d > 0) ui.openFavGroups()
-            9 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
+            8 -> if (d > 0) { if (epgJobs.get() > 0) Toast.makeText(this, "EPG is already updating", Toast.LENGTH_SHORT).show() else checkEpg(true) }
+            9 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
+            10 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
+            11 -> if (favSort == 0 && d > 0) ui.openFavGroups()
+            12 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
+            13 -> if (d > 0) ui.openLog()
         }
     }
 
@@ -1827,8 +2013,9 @@ class MainActivity : Activity() {
     }
     fun updRefresh() { runOnUiThread { ui.invalidate() } }
 
-    fun checkUpdate() {
-        if (updState == 1 || updState == 4) return
+    // silent = the background check: a failed one stays quiet, and a new version is announced once
+    fun checkUpdate(silent: Boolean = false) {
+        if (updState == 1 || updState == 4 || (silent && (updState == 3 || updState == 5))) return
         updState = 1; updRefresh()
         Thread {
             try {
@@ -1847,9 +2034,23 @@ class MainActivity : Activity() {
                     else -> { updTag = tag; updUrl = url; updState = 3 }
                 }
             } catch (e: Exception) { updErr = e.message ?: "No connection"; updState = 6 }
+            if (updState == 6) logErr("Update check failed: $updErr")
+            if (updState == 2 || updState == 3) prefs.edit().putLong("updAt", System.currentTimeMillis()).apply()
+            if (silent && updState == 6) updState = 0
+            if (silent && updState == 3 && prefs.getString("updSeen", "") != updTag) {
+                prefs.edit().putString("updSeen", updTag).apply()
+                runOnUiThread { flash("Update available: $updTag. Open Settings > App update", 8000) }
+            }
             updRefresh()
         }.start()
     }
+
+    // quiet check for a newer version: shortly after the app starts, then about every 12 hours while it is on screen
+    fun autoCheckUpdate() {
+        if (System.currentTimeMillis() - prefs.getLong("updAt", 0L) < 12 * 3600_000L) return
+        checkUpdate(true)
+    }
+    val updTick: Runnable = object : Runnable { override fun run() { autoCheckUpdate(); pv.postDelayed(this, 3600_000L) } }
 
     fun downloadUpdate() {
         if (updState != 3) return
@@ -1874,7 +2075,7 @@ class MainActivity : Activity() {
                 } }
                 if (f.length() < 100000L) throw Exception("The downloaded file looks wrong")
                 updState = 5
-            } catch (e: Exception) { updErr = e.message ?: "Download failed"; updState = 6 }
+            } catch (e: Exception) { updErr = e.message ?: "Download failed"; updState = 6; logErr("Update download failed: $updErr") }
             updRefresh()
         }.start()
     }
@@ -1901,7 +2102,8 @@ class MainActivity : Activity() {
     fun play(c: Ch) {
         if (cur != null && cur != c) prev = cur
         cur = c
-        errShown = false; osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
+        errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
+        osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
         player.setMediaItem(MediaItem.fromUri(c.url)); player.prepare(); player.playWhenReady = true
         prefs.edit().putString("last", c.url).apply()
         if (ui.mode == 0) banner.show(c)   // no banner while the lists are open
@@ -1938,14 +2140,6 @@ class MainActivity : Activity() {
     }
 
     fun flash(t: String, ms: Long = 2500) { osd.text = t; osd.visibility = View.VISIBLE; osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms) }
-
-    fun describe(c: Ch): String {
-        val n = now(c); val x = next(c)
-        val bar = n?.let { val k = (((System.currentTimeMillis() - it.start) * 10) / maxOf(1L, it.stop - it.start)).toInt().coerceIn(0, 10); "▰".repeat(k) + "▱".repeat(10 - k) }
-        return "${c.num}  ${c.name}" +
-                (n?.let { "\n${hm.format(it.start)}–${hm.format(it.stop)}  ${it.title}\n$bar" + (descOf(c, it).let { d -> if (d.isNotEmpty()) "\n$d" else "" }) } ?: "\nNo guide data") +
-                (x?.let { "\nNext ${hm.format(it.start)}  ${it.title}" } ?: "")
-    }
 
     fun zap(d: Int) {
         val l = if (shown.isNotEmpty()) shown else channels; if (l.isEmpty()) return
@@ -2119,12 +2313,16 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
         val ord = ArrayList<String>()
         try { val a = JSONArray(prefs.getString("favSeq", "[]")); for (k in 0 until a.length()) { val u = a.getString(k); if (u in fv && u !in ord) ord.add(u) } } catch (e: Exception) {}
         fv.filter { it !in ord }.sorted().forEach { ord.add(it) }
-        return JSONObject().put("app", "LiteTV").put("v", 1)
+        return JSONObject().put("app", "LiteTV").put("v", 2)
             .put("sources", JSONArray(prefs.getString("srcs", "[]")))
             .put("epgs", JSONArray(prefs.getString("epgs", "[]")))
             .put("favs", JSONArray(ord))
             .put("favSort", prefs.getInt("favSort", 0)).put("favInner", prefs.getInt("favInner", 2))
             .put("favGroups", JSONArray(prefs.getString("favGroups", "[]")))
+            .put("hidden", JSONArray((prefs.getStringSet("hidden", emptySet()) ?: emptySet()).sorted()))
+            .put("theme", prefs.getInt("theme", 0)).put("cA", prefs.getInt("cA", 12)).put("cP", prefs.getInt("cP", 12)).put("cH", prefs.getInt("cH", 12))
+            .put("font", prefs.getInt("fontSize", 1)).put("season", prefs.getBoolean("season", true))
+            .put("epgH", prefs.getInt("epgH", 12)).put("epgD", prefs.getInt("epgD", 7)).put("plD", prefs.getInt("plD", 7)).put("buf", prefs.getInt("buf", 0))
             .toString(2)
     }
 
@@ -2141,9 +2339,25 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
             prefs.edit().putString("srcs", sa.toString()).putString("epgs", ea.toString()).putStringSet("favs", HashSet(fv))
                 .putString("favSeq", JSONArray(fv.toList()).toString()).putString("favGroups", ga.toString())
                 .putInt("favSort", o.optInt("favSort", 0).coerceIn(0, FAV_SORTS.lastIndex)).putInt("favInner", o.optInt("favInner", 2).coerceIn(0, FAV_INNER.lastIndex)).apply()
+            // hidden channels and settings (older backup files do not have them: those settings stay as they are)
+            val ed = prefs.edit()
+            o.optJSONArray("hidden")?.let { ha -> val hs = HashSet<String>(); for (k in 0 until ha.length()) hs.add(ha.getString(k)); ed.putStringSet("hidden", hs) }
+            if (o.has("theme")) ed.putInt("theme", o.optInt("theme", 0).coerceIn(0, THEMES.size)).putInt("cA", o.optInt("cA", 12).coerceIn(0, SW - 1)).putInt("cP", o.optInt("cP", 12).coerceIn(0, SW - 1)).putInt("cH", o.optInt("cH", 12).coerceIn(0, SW - 1))
+            if (o.has("font")) ed.putInt("fontSize", o.optInt("font", 1).coerceIn(0, FONT_NAMES.lastIndex))
+            if (o.has("season")) ed.putBoolean("season", o.optBoolean("season", true))
+            if (o.has("epgH")) ed.putInt("epgH", o.optInt("epgH", 12))
+            if (o.has("epgD")) ed.putInt("epgD", o.optInt("epgD", 7).coerceIn(1, 30))
+            if (o.has("plD")) ed.putInt("plD", o.optInt("plD", 7).coerceIn(0, 60))
+            if (o.has("buf")) ed.putInt("buf", o.optInt("buf", 0).coerceIn(0, BUF_NAMES.lastIndex))
+            ed.apply()
             runOnUiThread {
                 val curId = sources.getOrNull(act)?.id
                 sources = readSrcs(); epgs = readEpgs(); favs.clear(); favs.addAll(fv); loadFavPrefs()
+                hidden.clear(); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
+                loadTheme(); refreshTheme()
+                fontIdx = prefs.getInt("fontSize", 1).coerceIn(0, FONT_NAMES.lastIndex); seasonOn = prefs.getBoolean("season", true)
+                epgHours = prefs.getInt("epgH", 12); epgDaysN = prefs.getInt("epgD", 7).coerceIn(1, 30); plDays = prefs.getInt("plD", 7).coerceIn(0, 60)
+                val ob = bufIdx; bufIdx = prefs.getInt("buf", 0).coerceIn(0, BUF_NAMES.lastIndex); if (ob != bufIdx) rebuildPlayer()
                 act = maxOf(0, sources.indexOfFirst { it.id == curId })
                 if (sources.isEmpty()) settings() else activate(act, true)
             }
@@ -2260,23 +2474,12 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
             }), keyboard = true)
     }
 
-    fun tracks(type: Int) {
-        val names = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
-        if (type == C.TRACK_TYPE_TEXT) { names.add("Off"); acts.add { player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type, true).build() } }
-        for (g in player.currentTracks.groups) if (g.type == type) for (t in 0 until g.length) {
-            val f = g.getTrackFormat(t)
-            names.add((f.label ?: f.language ?: "Track ${names.size + 1}") + (if (g.isTrackSelected(t)) "  ✓" else ""))
-            acts.add { player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type, false).setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, t)).build() }
-        }
-        if (names.isEmpty()) { flash("No tracks available"); return }
-        AlertDialog.Builder(this).setItems(names.toTypedArray()) { _, w -> acts[w]() }.show()
-    }
-
     val numRun = Runnable { val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { play(it) } }
 
     // BACK is handled here (before any view sees it): a short press goes back, holding it exits the app completely
     var backLong = false
     override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
+        if (sleepWarned && ev.action == KeyEvent.ACTION_DOWN) { setSleep(0); return true }
         if (ev.keyCode == KeyEvent.KEYCODE_BACK) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) backLong = false
@@ -2321,9 +2524,10 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
         return true
     }
 
-    override fun onStop() { super.onStop(); player.pause(); stopServer(); pv.removeCallbacks(epgTick) }
+    override fun onStop() { super.onStop(); player.pause(); stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick) }
     override fun onStart() {
         super.onStart(); if (cur != null) player.play()
+        pv.removeCallbacks(updTick); pv.postDelayed(updTick, 30_000L)
         pv.removeCallbacks(epgTick); pv.postDelayed(epgTick, 60_000L)   // coming back from Home: refresh the guide a minute later if it is older than the refresh setting
     }
     // pressing Home: give back the memory that is only a cache (logos, programmes read for the screen); they are re-read when needed
