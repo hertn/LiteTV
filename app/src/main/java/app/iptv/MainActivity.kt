@@ -216,7 +216,95 @@ val C_CHIP: Int get() = T.panel
 val C_BG: Int get() = T.panel
 val C_FIELD: Int get() = T.panel
 
-data class Ch(val id: String, val name: String, val group: String, val url: String, val logo: String, val num: Int, val src: String = "")
+// ---- catch-up (rewatching past shows) ----
+fun catchupMode(c: Ch): String {
+    val m = c.catchup.lowercase().trim()
+    if (m.isEmpty() || m == "0" || m == "false" || m == "none") return ""
+    return when (m) {
+        "append" -> if (c.cSrc.isNotEmpty()) "append" else ""
+        "shift", "timeshift" -> "shift"
+        "flussonic", "flussonic-hls", "flussonic-ts", "fs" -> "flussonic"
+        "xc", "xtream", "xtream-codes" -> "xc"
+        else -> if (c.cSrc.isNotEmpty()) "default" else ""
+    }
+}
+fun catchupDays(c: Ch): Int = if (catchupMode(c).isEmpty()) 0 else if (c.cDays > 0) c.cDays else 7
+
+val RE_CF = Regex("""\$?\{(utc|utcend|start|end|lutc|now|timestamp):([^}]*)\}""")
+val RE_CD = Regex("""\$?\{(duration|offset):(\d+)\}""")
+val RE_CV = Regex("""\$?\{(utc|utcend|start|end|lutc|now|timestamp|duration|offset|Y|m|d|H|M|S)\}""")
+val RE_XC = Regex("""^(https?://[^/]+)/(?:live/)?([^/]+)/([^/]+)/(\d+)(?:\.\w+)?$""")
+
+// date pieces in UTC: Y m d H M S, anything else is copied as it is
+fun utcFmt(f: String, ms: Long): String {
+    val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")); cal.timeInMillis = ms
+    fun p2(n: Int) = if (n < 10) "0$n" else "$n"
+    val sb = StringBuilder()
+    for (ch in f) sb.append(when (ch) {
+        'Y' -> cal.get(java.util.Calendar.YEAR).toString()
+        'm' -> p2(cal.get(java.util.Calendar.MONTH) + 1)
+        'd' -> p2(cal.get(java.util.Calendar.DAY_OF_MONTH))
+        'H' -> p2(cal.get(java.util.Calendar.HOUR_OF_DAY))
+        'M' -> p2(cal.get(java.util.Calendar.MINUTE))
+        'S' -> p2(cal.get(java.util.Calendar.SECOND))
+        else -> ch.toString()
+    })
+    return sb.toString()
+}
+
+// fills in {utc} {utcend} {start} {end} {duration} {offset} {lutc} {Y}{m}{d}{H}{M}{S} and {utc:YmdHMS}-style placeholders
+fun fillCatchup(t: String, st: Long, en: Long, now: Long): String {
+    val ss = st / 1000; val es = en / 1000; val ns = now / 1000
+    var s = RE_CF.replace(t) { m ->
+        val v = when (m.groupValues[1]) { "utc", "start" -> st; "utcend", "end" -> en; else -> now }
+        utcFmt(m.groupValues[2], v)
+    }
+    s = RE_CD.replace(s) { m ->
+        val n = maxOf(1L, m.groupValues[2].toLong())
+        ((if (m.groupValues[1] == "duration") es - ss else ns - ss) / n).toString()
+    }
+    return RE_CV.replace(s) { m ->
+        when (m.groupValues[1]) {
+            "utc", "start" -> ss.toString()
+            "utcend", "end" -> es.toString()
+            "lutc", "now", "timestamp" -> ns.toString()
+            "duration" -> (es - ss).toString()
+            "offset" -> (ns - ss).toString()
+            else -> utcFmt(m.groupValues[1], st)
+        }
+    }
+}
+
+fun flussonicTpl(u: String): String? {
+    val q = u.indexOf('?'); val base = if (q >= 0) u.substring(0, q) else u; val qs = if (q >= 0) u.substring(q) else ""
+    val nb = when {
+        base.endsWith("/mpegts") || base.endsWith("/embed.ts") -> base.substringBeforeLast('/') + "/timeshift_abs-{utc}.ts"
+        base.endsWith(".m3u8") -> base.removeSuffix(".m3u8") + "-{utc}-{duration}.m3u8"
+        else -> return null
+    }
+    return nb + qs
+}
+
+fun xcTpl(u: String): String? {
+    val q = u.indexOf('?'); val base = if (q >= 0) u.substring(0, q) else u
+    val g = RE_XC.find(base)?.groupValues ?: return null
+    return g[1] + "/timeshift/" + g[2] + "/" + g[3] + "/{duration:60}/{Y}-{m}-{d}:{H}-{M}/" + g[4] + ".ts"
+}
+
+// the link that plays one past programme of a channel, or null when the channel has no usable catch-up recipe
+fun catchupUrl(c: Ch, p: Prog): String? {
+    val tpl: String = when (catchupMode(c)) {
+        "default" -> if ("://" in c.cSrc) c.cSrc else c.url + c.cSrc
+        "append" -> c.url + c.cSrc
+        "shift" -> c.url + (if ('?' in c.url) "&" else "?") + "utc={utc}&lutc={lutc}"
+        "flussonic" -> flussonicTpl(c.url) ?: return null
+        "xc" -> xcTpl(c.url) ?: return null
+        else -> return null
+    }
+    return fillCatchup(tpl, p.start, p.stop, System.currentTimeMillis())
+}
+
+data class Ch(val id: String, val name: String, val group: String, val url: String, val logo: String, val num: Int, val src: String = "", val catchup: String = "", val cSrc: String = "", val cDays: Int = 0)
 data class Prog(val start: Long, val stop: Long, val title: String, val desc: String)
 data class Src(val id: String, val name: String, val m3u: String)
 data class Epg(val id: String, val name: String, val url: String, val all: Boolean, val srcIds: List<String>, val owner: String = "")
@@ -381,7 +469,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun reset(keep: Boolean) {
         val k = a.shown.indexOf(a.cur); val mx = maxOf(0, a.shown.size - 1)
         sel = if (keep) sel.coerceIn(0, mx) else if (k >= 0) k else 0
-        dayI = 0; progI = defProg(); touch(); invalidate()
+        dayI = a.todayIdx(); progI = defProg(); touch(); invalidate()
     }
     fun show(m: Int) { mode = m; side = false; visibility = View.VISIBLE; a.banner.visibility = View.GONE; touch(); requestFocus() }
     fun open(m: Int) { oi = 0; col = 1; show(m); reset(false) }
@@ -447,6 +535,15 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         a.season().let { if (it != 0 && a.shown.isNotEmpty()) deco(c, it, -rh * 0.14f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
 
+    // small "rewind" mark on programmes that can be rewatched
+    fun rewindMark(c: Canvas, cx: Float, cy: Float, r: Float) {
+        p.style = Paint.Style.FILL; p.color = LAV
+        val q = Path()
+        q.moveTo(cx, cy - r); q.lineTo(cx - r, cy); q.lineTo(cx, cy + r); q.close()
+        q.moveTo(cx + r, cy - r); q.lineTo(cx, cy); q.lineTo(cx + r, cy + r); q.close()
+        c.drawPath(q, p)
+    }
+
     fun cell(c: Canvas, x: Float, y: Float, w: Float, h: Float, selected: Boolean, focused: Boolean, bg: Int = ROW) {
         fill(c, x, y, w - 2, h - 2, if (selected) SEL else bg); if (selected && focused) border(c, x, y, w - 2, h - 2)
     }
@@ -461,7 +558,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 cell(c, 0f, y, dw, rh, on, col == 0)
                 val i = dys.indexOf(day)
                 txt(c, dd.format(day), dw / 2, y + rh * 0.52f, dw, 22f, -1, true, true)
-                txt(c, if (i == 0) "Today" else if (i == 1) "Tomorrow" else wd.format(day), dw / 2, y + rh * 0.78f, dw, 14f, GRAY, false, true)
+                val ti = a.todayIdx()
+                txt(c, if (i == ti) "Today" else if (i == ti + 1) "Tomorrow" else if (i == ti - 1) "Yesterday" else wd.format(day), dw / 2, y + rh * 0.78f, dw, 14f, GRAY, false, true)
             }
             chAt(sel + rel)?.let { cc ->
                 cell(c, dw, y, cw, rh, false, false); fill(c, dw, y, cw - 2, rh - 2, LOGOBG); drawLogo(c, cc, dw, y, cw, rh)
@@ -471,7 +569,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 cell(c, px, y, pw, rh, false, false, if (pr.start > now) PAST else PROG)   // upcoming shows use the lighter grey; current and finished shows use the dark panel colour; selection is shown by the border only
                 if (on && col == 2) border(c, px, y, pw - 2, rh - 2)
                 txt(c, a.hm.format(pr.start), px + 14 * d, y + rh * 0.58f, 70 * d, 20f, -1, true)
-                stxt(c, pr.title, px + 84 * d, y + rh * 0.52f, pw - 94 * d, 17f, -1, true, on && col == 2)
+                val cu = ch != null && pr.start <= now && a.canCatchup(ch, pr)
+                if (cu) rewindMark(c, px + pw - 24 * d, y + rh * 0.5f, 7 * d)
+                stxt(c, pr.title, px + 84 * d, y + rh * 0.52f, pw - 94 * d - (if (cu) 24 * d else 0f), 17f, -1, true, on && col == 2)
                 if (now >= pr.start && now < pr.stop) progress(c, px + 84 * d, y + rh * 0.74f, pw - 100 * d, pr)
             }
         }
@@ -489,7 +589,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 c.save(); c.clipRect(bx, by + 56 * d, bx + bw, by + bh - 10 * d); c.translate(bx + 24 * d, by + 62 * d); sl.draw(c); c.restore()
             }
         }
-        if (ch != null && col == 2) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch, true))   // only once the programme column is selected
+        if (ch != null && col == 2) optBar(c, bx, S * rh, bw, rh, a.chOptions(ch, true, pr))   // only once the programme column is selected
         chips(c, listOf(a.hm.format(now), a.dm.format(now), srcName(ch)).filter { it.isNotEmpty() }, bx, false)
         val sx = when (col) { 0 -> 0f; 1 -> dw; else -> px }   // the column the selector border is on
         a.season().let { if (it != 0 && ch != null) deco(c, it, if (sx > 0f) sx - rh * 0.1f else 0f, S * rh - rh * 0.39f, rh * 0.52f) }
@@ -907,9 +1007,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             txt(c, "On air:  ${wdd.format(pr.start)} / ${a.hm.format(pr.start)}", w * 0.62f, h * 0.58f, w * 0.34f, 19f, -1, true)
             txt(c, "Duration:  ${(pr.stop - pr.start) / 60000} min", w * 0.62f, h * 0.63f, w * 0.34f, 19f, -1, true)
         }
-        val py = h * 0.74f; p.color = LAV; c.drawRoundRect(RectF(x, py, x + w * 0.18f, py + h * 0.07f), h * 0.035f, h * 0.035f, p)
+        val cu = pr != null && pr.stop <= now && a.canCatchup(ch, pr); val bw0 = if (cu) w * 0.25f else w * 0.18f
+        val py = h * 0.74f; p.color = LAV; c.drawRoundRect(RectF(x, py, x + bw0, py + h * 0.07f), h * 0.035f, h * 0.035f, p)
         val tri = Path(); tri.moveTo(x + w * 0.025f, py + h * 0.02f); tri.lineTo(x + w * 0.025f, py + h * 0.05f); tri.lineTo(x + w * 0.042f, py + h * 0.035f); tri.close()
-        p.color = LAVT; c.drawPath(tri, p); txt(c, "Watch", x + w * 0.055f, py + h * 0.047f, w * 0.11f, 20f, LAVT, true)
+        p.color = LAVT; c.drawPath(tri, p); txt(c, if (cu) "Watch catch-up" else "Watch", x + w * 0.055f, py + h * 0.047f, bw0 - w * 0.07f, 20f, LAVT, true)
         val bx = w * 0.12f; val bw = w * 0.76f; val by = h * 0.88f
         p.color = 0xFFD7E0EA.toInt(); c.drawRoundRect(RectF(bx, by, bx + bw, by + 12 * d), 6 * d, 6 * d, p)
         if (pr != null) { val f = ((now - pr.start).toFloat() / maxOf(1L, pr.stop - pr.start)).coerceIn(0f, 1f); p.color = PUR; c.drawRoundRect(RectF(bx, by, bx + bw * f, by + 12 * d), 6 * d, 6 * d, p) }
@@ -972,7 +1073,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 }
             }
         } else if (mode == 5) {
-            if (ok) { val c0 = infoCh; close(); if (c0 != null) a.play(c0) }
+            if (ok) { val c0 = infoCh; val p0 = infoProg; close(); if (c0 != null) { if (p0 != null && p0.stop <= System.currentTimeMillis() && a.canCatchup(c0, p0)) a.playCatchup(c0, p0) else a.play(c0) } }
         } else if (mode == 8) {
             val n = a.settingsItems().size
             when { up -> setSel = (setSel + n - 1) % n; dn -> setSel = (setSel + 1) % n; lf -> a.settingAct(setSel, -1); rt -> a.settingAct(setSel, 1); ok -> a.settingAct(setSel, 1) }
@@ -1023,12 +1124,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                     when (col) {
                         0 -> { dayI = (dayI + sg).coerceIn(0, dys.lastIndex); progI = defProg() }
                         1 -> { sel = wrap(sel + sg); progI = defProg() }
-                        else -> progI = (progI + (if (up) 1 else -1)).coerceIn(0, maxOf(0, dp.size - 1))   // UP = later show (drawn above), DOWN = earlier show
+                        else -> { progI = (progI + (if (up) 1 else -1)).coerceIn(0, maxOf(0, dp.size - 1)); oi = oi.coerceIn(0, maxOf(0, a.nOpts(true, ch, dp.getOrNull(progI)) - 1)) }   // UP = later show (drawn above), DOWN = earlier show
                     }
                 }
                 lf -> if (col == 2 && oi > 0) oi-- else if (col > 0) col-- else openSide()
-                rt -> if (col < 2) col++ else oi = minOf(oi + 1, a.nOpts(true) - 1)
-                ok -> if (ch != null) a.chOption(ch, oi, dp.getOrNull(progI))
+                rt -> if (col < 2) col++ else oi = minOf(oi + 1, a.nOpts(true, ch, dp.getOrNull(progI)) - 1)
+                ok -> if (ch != null) a.chOption(ch, oi, if (col == 2) dp.getOrNull(progI) else null)
             }
         }
         touch(); invalidate(); return true
@@ -1210,7 +1311,7 @@ class MainActivity : Activity() {
                     retryN++; player.seekToDefaultPosition(); player.prepare(); return
                 }
                 errShown = true
-                logErr((cur?.name ?: "Stream") + ": " + errText(e))
+                logErr((cur?.name ?: "Stream") + (if (catchupProg != null) " (catch-up)" else "") + ": " + errText(e))
                 val head = cur?.let { "${it.num}: ${it.name}" } ?: "Stream"
                 if (retryN < MAX_RETRY) {
                     val wait = minOf(30000L, 2500L shl retryN); retryN++
@@ -1222,6 +1323,7 @@ class MainActivity : Activity() {
                 pv.removeCallbacks(loadRun)
                 if (st == Player.STATE_BUFFERING) { if (!errShown) pv.postDelayed(loadRun, 700) } else hideLoading()
                 if (st == Player.STATE_READY) { retryN = 0; if (errShown) { errShown = false; clearMid() } }
+                if (st == Player.STATE_ENDED && catchupProg != null) { cur?.let { flash("Catch-up ended, back to live", 2500); play(it) } }
             }
         })
         return p
@@ -1409,12 +1511,19 @@ class MainActivity : Activity() {
         return out
     }
 
+    // how many past days of guide to keep for the channels that use this guide file (the longest catch-up among them, at most 14)
+    fun pastDays(u: String): Int {
+        var m = 0
+        for (s in sources.toList()) if (u in epgUrls(s)) for (c in (chCache[s.id] ?: emptyList())) m = maxOf(m, catchupDays(c))
+        return minOf(m, 14)
+    }
+
     // reads one downloaded guide file straight into the database (nothing is collected in RAM); skipped when it was already imported
     fun importEpg(u: String, f: File) {
-        val key = hx(u); val keep = wantedIds(u)
-        val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k2"   // k2 = matching rules version (a new version re-imports the file once)
+        val key = hx(u); val keep = wantedIds(u); val past = pastDays(u)
+        val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k3:$past"   // k2 = matching rules version (a new version re-imports the file once)
         if (prefs.getString("imp_$key", "") == mark) return
-        val lo = dayStart(); val hi = lo + epgDaysN * 86400000L
+        val lo = dayStart() - past * 86400000L; val hi = dayStart() + epgDaysN * 86400000L
         val fz = SimpleDateFormat("yyyyMMddHHmmss Z", java.util.Locale.US); val fl = SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
         fun pt(s: String?): Long { val d = (s ?: "").trim(); return (if (d.length > 14) fz.parse(d) else fl.parse(d))!!.time }
         var n = 0; var bad = false
@@ -1579,12 +1688,24 @@ class MainActivity : Activity() {
     fun parseM3u(lines: Sequence<String>): List<Ch> {
         val out = ArrayList<Ch>(); val re = Regex("([\\w-]+)=\"([^\"]*)\"")
         var name = ""; var id = ""; var g = "Other"; var logo = ""; var no = 0; var have = false
+        var cm = ""; var cs = ""; var cd = 0
+        var hm0 = ""; var hs0 = ""; var hd0 = 0   // catch-up settings from the #EXTM3U header line, used when a channel has none of its own
         for (l in lines) {
-            if (l.startsWith("#EXTINF")) {
+            if (l.startsWith("#EXTM3U")) {
                 val a = re.findAll(l).associate { it.groupValues[1] to it.groupValues[2] }
-                name = l.substringAfterLast(',').trim(); id = a["tvg-id"] ?: ""; if (id.isEmpty()) id = name
-                g = a["group-title"]?.ifEmpty { null } ?: "Other"; logo = a["tvg-logo"] ?: ""; no = a["tvg-chno"]?.toIntOrNull() ?: 0; have = true
-            } else if (have && l.isNotBlank() && !l.startsWith("#")) { out.add(Ch(id, name, g, l.trim(), logo, if (no > 0) no else out.size + 1)); have = false }
+                hm0 = a["catchup"] ?: ""; hs0 = a["catchup-source"] ?: ""; hd0 = a["catchup-days"]?.toIntOrNull() ?: 0
+            } else if (l.startsWith("#EXTINF")) {
+                val a = re.findAll(l).associate { it.groupValues[1] to it.groupValues[2] }
+                val q = l.lastIndexOf('"'); val cp = l.indexOf(',', maxOf(0, q))   // the name comes after the last comma that is outside the quotes
+                name = (if (cp >= 0) l.substring(cp + 1) else l.substringAfterLast(',')).trim(); id = a["tvg-id"] ?: ""; if (id.isEmpty()) id = name
+                g = a["group-title"]?.ifEmpty { null } ?: "Other"; logo = a["tvg-logo"] ?: ""; no = a["tvg-chno"]?.toIntOrNull() ?: 0
+                cm = a["catchup"] ?: hm0; cs = a["catchup-source"] ?: hs0
+                cd = a["catchup-days"]?.toIntOrNull() ?: a["tvg-rec"]?.toIntOrNull() ?: a["timeshift"]?.toIntOrNull() ?: hd0
+                if (cm.isEmpty() && cs.isNotEmpty()) cm = "default"
+                have = true
+            } else if (have && l.isNotBlank() && !l.startsWith("#")) {
+                out.add(Ch(id, name, g, l.trim(), logo, if (no > 0) no else out.size + 1, catchup = cm, cSrc = cs, cDays = cd)); have = false
+            }
         }
         return out
     }
@@ -1759,25 +1880,67 @@ class MainActivity : Activity() {
     fun dayStart(): Long = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
 
     // the days the guide screen lists: today, then as many as the guide really has (at most the "Guide length" setting, never fewer than 2)
+    var backKey: List<Ch>? = null; var backVal = 0
+    // how many days back the guide should reach: the longest catch-up of the channels on screen (at most 14)
+    fun backDays(): Int {
+        val k = shown
+        if (k !== backKey) { backKey = k; backVal = minOf(14, k.maxOfOrNull { catchupDays(it) } ?: 0) }
+        return backVal
+    }
+
+    @Volatile var firstCache = 0L; @Volatile var firstVer = -1
+    // start of the first programme in the database (so only days that really have data are listed)
+    fun epgFirst(): Long {
+        val v = epgVer
+        if (firstVer == v) return firstCache
+        val sc = scope; var m = 0L
+        if (sc.isNotEmpty()) {
+            try {
+                epgDb.rawQuery("SELECT MIN(s) FROM p WHERE src IN (" + sc.joinToString(",") { "?" } + ")", sc.toTypedArray()).use { cur ->
+                    if (cur.moveToFirst() && !cur.isNull(0)) m = cur.getLong(0)
+                }
+            } catch (e: Exception) {}
+        }
+        firstCache = m; firstVer = v
+        return m
+    }
+
     fun days(): List<Long> {
+        val out = ArrayList<Long>()
+        val back = backDays(); val first = epgFirst()
+        val pc = java.util.Calendar.getInstance(); pc.timeInMillis = dayStart()
+        for (i in 1..back) {   // earlier days, only as far back as the guide has data
+            pc.add(java.util.Calendar.DAY_OF_MONTH, -1)
+            if (first <= 0 || pc.timeInMillis + 86400000L <= first) break
+            out.add(0, pc.timeInMillis)
+        }
         val c = java.util.Calendar.getInstance(); c.timeInMillis = dayStart()
-        val end = epgEnd(); val out = ArrayList<Long>()
+        val end = epgEnd()
         for (i in 0 until maxOf(2, epgDaysN)) {
             if (i >= 2 && c.timeInMillis >= end) break
             out.add(c.timeInMillis); c.add(java.util.Calendar.DAY_OF_MONTH, 1)
         }
         return out
     }
+
+    fun todayIdx(): Int = days().indexOf(dayStart()).coerceAtLeast(0)
     fun dayProgs(ch: Ch, day: Long): List<Prog> = progsOf(ch).filter { it.stop > day && it.start < day + 86400000L }
 
     // options bar next to a channel / program. ids: 0 Watch, 1 TV guide, 2 Program info, 3 Channel settings, 4 favorite, 5 hide
     // the TV guide button is only in the channel list (LEFT); inside the guide itself it is not shown
-    fun optIds(guide: Boolean) = if (guide) listOf(0, 2, 3, 4, 5) else listOf(0, 1, 2, 3, 4, 5)
-    fun nOpts(guide: Boolean) = optIds(guide).size
-    fun chOptions(c: Ch, guide: Boolean) = optIds(guide).map { id ->
+    fun optIds(guide: Boolean, c: Ch? = null, p: Prog? = null): List<Int> {
+        if (!guide) return listOf(0, 1, 2, 3, 4, 5)
+        if (c != null && p != null && canCatchup(c, p))
+            return if (p.stop <= System.currentTimeMillis()) listOf(7, 0, 2, 3, 4, 5) else listOf(0, 6, 2, 3, 4, 5)
+        return listOf(0, 2, 3, 4, 5)
+    }
+    fun nOpts(guide: Boolean, c: Ch? = null, p: Prog? = null) = optIds(guide, c, p).size
+    fun chOptions(c: Ch, guide: Boolean, p: Prog? = null) = optIds(guide, c, p).map { id ->
         when (id) {
-            0 -> "Watch"; 1 -> "TV guide"; 2 -> "Program info"; 3 -> "Channel settings"
+            0 -> if (guide && p != null && p.stop <= System.currentTimeMillis() && canCatchup(c, p)) "Watch live" else "Watch"
+            1 -> "TV guide"; 2 -> "Program info"; 3 -> "Channel settings"
             4 -> if (c.url in favs) "Remove from favorites" else "Add to favorites"
+            6 -> "Watch from start"; 7 -> "Watch catch-up"
             else -> if (c.url in hidden) "Unhide channel" else "Hide channel"
         }
     }
@@ -1786,13 +1949,14 @@ class MainActivity : Activity() {
 
     fun chOption(c: Ch, i: Int, p: Prog? = null) {
         val guide = ui.mode == 2
-        when (optIds(guide).getOrNull(i)) {
+        when (optIds(guide, c, p).getOrNull(i)) {
             0 -> { if (c == cur) { ui.close(); switchTo(c) } else play(c) }   // 1st Watch: change channel, UI stays; 2nd Watch: close UI
             1 -> ui.openGuide(c)
             2 -> ui.openInfo(c, p ?: now(c))
             3 -> { if (c != cur) play(c); ui.openSub() }
             4 -> { toggleFav(c.url); selectGroup(grp, true) }
             5 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
+            6, 7 -> if (p != null) { ui.close(); playCatchup(c, p); switchTo(c) }
         }
         ui.invalidate()
     }
@@ -2099,14 +2263,39 @@ class MainActivity : Activity() {
     fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return progsOf(c).firstOrNull { t >= it.start && t < it.stop } }
     fun next(c: Ch): Prog? { val n = now(c) ?: return null; return progsOf(c).firstOrNull { it.start >= n.stop } }
 
-    fun play(c: Ch) {
+    var catchupProg: Prog? = null   // the past programme that is playing right now (null = live)
+
+    fun play(c: Ch) = startPlay(c, c.url, null)
+
+    fun startPlay(c: Ch, url: String, cp: Prog?) {
         if (cur != null && cur != c) prev = cur
-        cur = c
+        cur = c; catchupProg = cp
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
         osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
-        player.setMediaItem(MediaItem.fromUri(c.url)); player.prepare(); player.playWhenReady = true
-        prefs.edit().putString("last", c.url).apply()
-        if (ui.mode == 0) banner.show(c)   // no banner while the lists are open
+        player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.playWhenReady = true
+        if (cp == null) {
+            prefs.edit().putString("last", c.url).apply()
+            if (ui.mode == 0) banner.show(c)   // no banner while the lists are open
+        }
+    }
+
+    // a programme can be rewatched when its channel has catch-up, it has started, and it is not older than the channel's catch-up days
+    fun canCatchup(c: Ch, p: Prog): Boolean {
+        if (catchupMode(c).isEmpty()) return false
+        val now = System.currentTimeMillis()
+        return p.start <= now && p.start >= now - catchupDays(c) * 86400_000L
+    }
+
+    fun playCatchup(c: Ch, p: Prog) {
+        val u = catchupUrl(c, p)
+        if (u == null) { flash("Catch-up is not available for this channel", 3000); return }
+        startPlay(c, u, p)
+        flash("Catch-up: ${p.title}  (${hm.format(p.start)} - ${hm.format(p.stop)})", 5000)
+    }
+
+    fun skip(ms: Long) {
+        if (player.isCurrentMediaItemSeekable) { player.seekTo(maxOf(0L, player.currentPosition + ms)); flash(if (ms > 0) "+${ms / 1000} s" else "${ms / 1000} s", 1000) }
+        else flash("This stream cannot be skipped", 1500)
     }
 
     // human readable reason why a stream does not play
@@ -2513,6 +2702,11 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_PROG_BLUE -> ui.open(2)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MENU -> ui.openMenu()
             KeyEvent.KEYCODE_INFO -> cur?.let { banner.show(it) }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> player.playWhenReady = !player.playWhenReady
+            KeyEvent.KEYCODE_MEDIA_PLAY -> player.playWhenReady = true
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> player.playWhenReady = false
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> skip(30000L)
+            KeyEvent.KEYCODE_MEDIA_REWIND -> skip(-30000L)
             KeyEvent.KEYCODE_LAST_CHANNEL -> prev?.let { play(it) }
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
                 val d = k - KeyEvent.KEYCODE_0
