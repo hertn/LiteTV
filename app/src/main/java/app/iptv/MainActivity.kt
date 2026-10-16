@@ -2272,7 +2272,11 @@ class MainActivity : Activity() {
         cur = c; catchupProg = cp
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
         osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
-        player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.playWhenReady = true
+        val item = MediaItem.Builder().setUri(url).apply {
+            // catch-up links have no .m3u8 extension, so tell ExoPlayer it is HLS
+            if (cp != null) setMimeType(MimeTypes.APPLICATION_M3U8)
+        }.build()
+        player.setMediaItem(item); player.prepare(); player.playWhenReady = true
         if (cp == null) {
             prefs.edit().putString("last", c.url).apply()
             if (ui.mode == 0) banner.show(c)   // no banner while the lists are open
@@ -2288,6 +2292,7 @@ class MainActivity : Activity() {
 
     fun playCatchup(c: Ch, p: Prog) {
         val u = catchupUrl(c, p)
+        logErr("CATCHUP URL: $u")
         if (u == null) { flash("Catch-up is not available for this channel", 3000); return }
         startPlay(c, u, p)
         flash("Catch-up: ${p.title}  (${hm.format(p.start)} - ${hm.format(p.stop)})", 5000)
