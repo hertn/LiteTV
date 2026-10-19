@@ -348,6 +348,51 @@ class Banner(ctx: Context, val a: MainActivity) : View(ctx) {
     }
 }
 
+// seek bar for catch-up: where you are in the programme; LEFT / RIGHT scrub (holding = bigger steps), OK = jump there, or pause / play
+class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
+    init { alpha = UI_ALPHA }
+    val pt = Paint(Paint.ANTI_ALIAS_FLAG)
+    var target = -1L   // where the bar points while you scrub (-1 = it follows the player)
+    val hide = Runnable { if (target < 0 && a.player.playWhenReady) visibility = View.GONE }
+    val commit = Runnable { if (target >= 0) { a.player.seekTo(target); target = -1L; show() } }
+    fun show() { visibility = View.VISIBLE; removeCallbacks(hide); postDelayed(hide, 6000); invalidate() }
+    fun nudge(dir: Int, rep: Int) {
+        val p = a.player; val dur = p.duration
+        if (dur <= 0 || !p.isCurrentMediaItemSeekable) { a.flash("This stream cannot be skipped", 1500); return }
+        val step = if (rep >= 20) 60_000L else if (rep >= 8) 30_000L else 10_000L   // holding the key makes the steps bigger
+        val base = if (target >= 0) target else p.currentPosition
+        target = (base + dir * step).coerceIn(0L, maxOf(0L, dur - 2000L))
+        show(); removeCallbacks(commit); postDelayed(commit, 900)
+    }
+    fun okPress() {
+        if (target >= 0) { removeCallbacks(commit); commit.run() }
+        else { a.player.playWhenReady = !a.player.playWhenReady; show() }
+    }
+    fun tm(ms: Long): String {
+        val s = maxOf(0L, ms) / 1000; val h = s / 3600; val m = s % 3600 / 60; val x = s % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, x) else String.format("%02d:%02d", m, x)
+    }
+    override fun onDraw(c: Canvas) {
+        if (visibility == View.VISIBLE) postInvalidateDelayed(500)
+        val u = a.ui; val cp = a.catchupProg ?: return; val pl = a.player; val dur = pl.duration
+        if (dur <= 0) return
+        val pos = (if (target >= 0) target else pl.currentPosition).coerceIn(0L, dur); val buf = pl.bufferedPosition.coerceIn(0L, dur)
+        val w = width.toFloat(); val h = height.toFloat(); val d = u.d
+        val gx = w * 0.06f; val bw = w * 0.88f; val rh = h / 7.5f * 1.1f; val y = h - rh - h * 0.07f
+        u.fill(c, gx, y, bw, rh, u.ROW)
+        val tx = gx + 20 * d; val mw = bw - 40 * d
+        u.txt(c, cp.title, tx, y + rh * 0.27f, mw - 90 * d, 20f, -1, true)
+        if (!pl.playWhenReady) u.txt(c, "Paused", tx + mw - 80 * d, y + rh * 0.27f, 80 * d, 14f, u.LAV, true)
+        u.txt(c, "${a.hm.format(cp.start)} - ${a.hm.format(cp.stop)}", tx, y + rh * 0.47f, mw, 14f, u.GRAY)
+        val bx = tx + 74 * d; val bww = mw - 148 * d; val by = y + rh * 0.66f; val bh = 8 * d
+        u.fill(c, bx, by, bww, bh, 0x40FFFFFF)
+        u.fill(c, bx, by, bww * buf / dur, bh, 0x66FFFFFF)
+        u.fill(c, bx, by, bww * pos / dur, bh, u.LAV)
+        pt.color = -1; c.drawCircle(bx + bww * pos / dur, by + bh / 2, 9 * d, pt)
+        u.txt(c, tm(pos), tx, by + bh / 2 + 5 * d, 70 * d, 15f, -1, true)
+        u.txt(c, tm(dur), bx + bww + 10 * d, by + bh / 2 + 5 * d, 70 * d, 15f, u.GRAY)
+    }
+}
 class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val d = ctx.resources.displayMetrics.density
     val fs: Float get() = a.fontScale   // text size setting (Settings > Font size); only text is scaled, not the layout
@@ -1139,6 +1184,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 class MainActivity : Activity() {
     lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var ui: Ui; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
     lateinit var player: ExoPlayer; lateinit var prefs: SharedPreferences
+    lateinit var catchupBar: CatchupBar
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
     var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false
@@ -1284,6 +1330,7 @@ class MainActivity : Activity() {
         val spinSize = (72 * resources.displayMetrics.density).toInt()
         root.addView(spin, FrameLayout.LayoutParams(spinSize, spinSize, Gravity.CENTER))
         banner = Banner(this, this).apply { visibility = View.GONE }; root.addView(banner, FrameLayout.LayoutParams(-1, -1))
+        catchupBar = CatchupBar(this, this).apply { visibility = View.GONE }; root.addView(catchupBar, FrameLayout.LayoutParams(-1, -1))
         ui = Ui(this, this).apply { visibility = View.GONE }; root.addView(ui, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         player = makePlayer(); pv.player = player
@@ -2270,6 +2317,7 @@ class MainActivity : Activity() {
     fun startPlay(c: Ch, url: String, cp: Prog?) {
         if (cur != null && cur != c) prev = cur
         cur = c; catchupProg = cp
+        if (cp != null) catchupBar.show() else catchupBar.visibility = View.GONE
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
         osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
         val item = MediaItem.Builder().setUri(url).apply {
@@ -2295,7 +2343,6 @@ class MainActivity : Activity() {
         logErr("CATCHUP URL: $u")
         if (u == null) { flash("Catch-up is not available for this channel", 3000); return }
         startPlay(c, u, p)
-        flash("Catch-up: ${p.title}  (${hm.format(p.start)} - ${hm.format(p.stop)})", 5000)
     }
 
     fun skip(ms: Long) {
@@ -2689,6 +2736,7 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
 
     fun backShort(ev: KeyEvent) {
         if (ui.mode != 0) { ui.onKeyDown(KeyEvent.KEYCODE_BACK, ev); return }
+        if (catchupProg != null) { cur?.let { flash("Back to live", 1500); play(it) }; return }
         if (prev != null) prev?.let { play(it) } else flash("Hold BACK to exit the app", 2500)
     }
 
@@ -2697,6 +2745,18 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
 
     override fun onKeyDown(k: Int, e: KeyEvent): Boolean {
         if (ui.mode != 0) { ui.requestFocus(); return ui.onKeyDown(k, e) }
+        if (catchupProg != null) {
+            when (k) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> { catchupBar.nudge(-1, e.repeatCount); return true }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { catchupBar.nudge(1, e.repeatCount); return true }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { catchupBar.okPress(); return true }
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { catchupBar.show(); return true }
+                KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_CHANNEL_DOWN -> { catchupBar.show(); return true }
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { catchupBar.nudge(1, 8); return true }
+                KeyEvent.KEYCODE_MEDIA_REWIND -> { catchupBar.nudge(-1, 8); return true }
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { player.playWhenReady = !player.playWhenReady; catchupBar.show(); return true }
+            }
+        }
         val dir = if (REVERSED) 1 else -1
         when (k) {
             KeyEvent.KEYCODE_DPAD_UP -> zap(dir)
