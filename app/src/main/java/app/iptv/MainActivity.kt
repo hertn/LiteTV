@@ -353,6 +353,38 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
     init { alpha = UI_ALPHA }
     val pt = Paint(Paint.ANTI_ALIAS_FLAG)
     var target = -1L   // where the bar points while you scrub (-1 = it follows the player)
+    val thumbs = android.util.LruCache<Int, Bitmap>(40)   // preview pictures, one per 10 seconds of the programme
+    var thumbBusy = false
+    val thumbRun = Runnable { fetchThumb() }
+    init { pt.isFilterBitmap = true }
+    fun slot(ms: Long) = (ms / 10000L).toInt()
+    fun thumbUrl(sec: Int): String? {
+        val s = a.catchupSrc ?: return null
+        if (!s.contains("/catchup/")) return null   // previews only come from the catch-up helper on your server
+        return s.replace("/catchup/", "/thumb/") + (if (s.contains("?")) "&" else "?") + "t=" + sec
+    }
+    fun fetchThumb() {
+        val t = target; if (t < 0 || thumbBusy) return
+        val sl = slot(t); if (thumbs.get(sl) != null) return
+        val u = thumbUrl(sl * 10) ?: return
+        thumbBusy = true
+        Thread {
+            var bm: Bitmap? = null
+            try {
+                val cn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                cn.connectTimeout = 4000; cn.readTimeout = 20000
+                if (cn.responseCode == 200) bm = BitmapFactory.decodeStream(cn.inputStream)
+                cn.disconnect()
+            } catch (e: Exception) {}
+            val got = bm
+            post {
+                thumbBusy = false
+                if (got != null) thumbs.put(sl, got)
+                invalidate()
+                if (target >= 0 && slot(target) != sl) fetchThumb()
+            }
+        }.start()
+    }
     val hide = Runnable { if (target < 0 && a.player.playWhenReady) visibility = View.GONE }
     val commit = Runnable { if (target >= 0) { a.player.seekTo(target); target = -1L; show() } }
     fun show() { visibility = View.VISIBLE; removeCallbacks(hide); postDelayed(hide, 6000); invalidate() }
@@ -362,7 +394,8 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
         val step = if (rep >= 20) 60_000L else if (rep >= 8) 30_000L else 10_000L   // holding the key makes the steps bigger
         val base = if (target >= 0) target else p.currentPosition
         target = (base + dir * step).coerceIn(0L, maxOf(0L, dur - 2000L))
-        show(); removeCallbacks(commit); postDelayed(commit, 900)
+        show(); removeCallbacks(commit); postDelayed(commit, if (thumbUrl(0) != null) 2000L else 900L)   // with previews you get 2 s to look at the picture
+        removeCallbacks(thumbRun); postDelayed(thumbRun, 250)
     }
     fun okPress() {
         if (target >= 0) { removeCallbacks(commit); commit.run() }
@@ -391,6 +424,21 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
         pt.color = -1; c.drawCircle(bx + bww * pos / dur, by + bh / 2, 9 * d, pt)
         u.txt(c, tm(pos), tx, by + bh / 2 + 5 * d, 70 * d, 15f, -1, true)
         u.txt(c, tm(dur), bx + bww + 10 * d, by + bh / 2 + 5 * d, 70 * d, 15f, u.GRAY)
+        if (target >= 0) {
+            val now = pl.currentPosition; val diff = Math.abs(target - now)
+            val lab = tm(target) + "  (" + (if (target >= now) "+" else "-") + tm(diff) + ")"
+            val hasTh = thumbUrl(0) != null
+            val tw = (if (hasTh) 240 else 200) * d; val th = if (hasTh) 135 * d else 0f
+            val cx = (bx + bww * pos / dur).coerceIn(bx + tw / 2, bx + bww - tw / 2)
+            val ph = th + 40 * d; val py = y - 4 * d - ph
+            u.fill(c, cx - tw / 2 - 6 * d, py, tw + 12 * d, ph, u.ROW)
+            if (hasTh) {
+                val bmp = thumbs.get(slot(target))
+                if (bmp != null) c.drawBitmap(bmp, null, RectF(cx - tw / 2, py + 6 * d, cx + tw / 2, py + 6 * d + th), pt)
+                else u.fill(c, cx - tw / 2, py + 6 * d, tw, th, 0xFF000000.toInt())
+            }
+            u.txt(c, lab, cx, py + ph - 12 * d, tw, 16f, -1, true, true)
+        }
     }
 }
 class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
@@ -2311,13 +2359,15 @@ class MainActivity : Activity() {
     fun next(c: Ch): Prog? { val n = now(c) ?: return null; return progsOf(c).firstOrNull { it.start >= n.stop } }
 
     var catchupProg: Prog? = null   // the past programme that is playing right now (null = live)
+    var catchupSrc: String? = null   // the link of the catch-up that is playing (the seek bar uses it to ask for preview pictures)
 
     fun play(c: Ch) = startPlay(c, c.url, null)
 
     fun startPlay(c: Ch, url: String, cp: Prog?) {
         if (cur != null && cur != c) prev = cur
         cur = c; catchupProg = cp
-        if (cp != null) catchupBar.show() else catchupBar.visibility = View.GONE
+        catchupSrc = if (cp != null) url else null
+        if (cp != null) { catchupBar.thumbs.evictAll(); catchupBar.show() } else catchupBar.visibility = View.GONE
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
         osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
         val item = MediaItem.Builder().setUri(url).apply {
