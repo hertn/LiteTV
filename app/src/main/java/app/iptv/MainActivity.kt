@@ -1513,7 +1513,8 @@ class MainActivity : Activity() {
     // which keeps the old file (and the guide already imported) for any source whose download fails
     fun clearLogoAndGuideCaches() {
         cacheDir.listFiles()?.filter { it.name.startsWith("lg") }?.forEach { it.delete() }
-        logos.evictAll(); failed.clear(); progCache.evictAll(); descCache.evictAll(); thumbs.evictAll()
+        logos.evictAll(); failed.clear(); progCache.evictAll(); descCache.evictAll()
+        runOnUiThread { catchupBar.resetThumbs() }
     }
     fun cleanCache() {
         val keep = HashSet<String>()
