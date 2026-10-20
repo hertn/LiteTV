@@ -2783,14 +2783,35 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
     fun settings() {
         startServer()
         val ip = localIp(); val url = ip?.let { "http://$it:$PORT" }
-        val views = ArrayList<View>()
-        views.add(TextView(this).apply { text = if (url != null) "Scan with your phone to manage playlists, EPGs and favorites order, or open\n$url" else "No network"; textSize = 18f; setTextColor(0xFFB8BECC.toInt()) })
-        if (url != null) views.add(ImageView(this).apply { setImageBitmap(qr(url)) })
-        views.add(TextView(this).apply { text = "\"Reload\" downloads the playlists, guides and channel logos again from scratch. If a download fails, the previous copy is kept."; textSize = 15f; setTextColor(0xFF8A90A0.toInt()) })
+        val dp = resources.displayMetrics.density
+        fun label(t: String, sp: Float, col: Int, bold: Boolean = false, top: Int = 0) = TextView(this).apply {
+            text = t; textSize = sp; setTextColor(col); if (bold) typeface = Typeface.DEFAULT_BOLD; setLineSpacing(0f, 1.1f)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = (top * dp).toInt() }
+        }
+        // text on the left, QR code on the right
+        val info = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL
+            if (url != null) {
+                addView(label("Manage from your phone", 20f, -1, true))
+                addView(label("Scan the code, or open this address in a browser on the same network", 16f, 0xFFB8BECC.toInt(), top = 6))
+                addView(label(url, 18f, C_PUR, true, 12))
+            } else addView(label("No network", 20f, -1, true))
+            addView(View(this@MainActivity).apply { setBackgroundColor(0x33FFFFFF); layoutParams = LinearLayout.LayoutParams(-1, (1 * dp).toInt()).apply { topMargin = (22 * dp).toInt() } })
+            addView(label("Reload", 18f, -1, true, 20))
+            addView(label("Downloads the playlists, guides and channel logos again from scratch. If a download fails, the previous copy is kept.", 16f, 0xFF8A90A0.toInt(), top = 6))
+        }
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+            if (url != null) addView(ImageView(this@MainActivity).apply {
+                setImageBitmap(qr(url, 300)); background = dBg(0xFFFFFFFF.toInt())
+            }, LinearLayout.LayoutParams((220 * dp).toInt(), (220 * dp).toInt()).apply { leftMargin = (32 * dp).toInt() })
+        }
+        val views = listOf<View>(body)
         val d = showPanel("Playlist & EPG Setup", views, listOf(
             DBtn("Close", C_FIELD) { it.dismiss() },
             DBtn("Reload", C_FIELD) { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() },
-            DBtn("Add here", C_PUR) { it.dismiss(); addSource() }))
+            DBtn("Add here", C_PUR) { it.dismiss(); addSource() }), widthFrac = 0.62)
         d.setOnDismissListener { stopServer() }
         dlg = d
     }
