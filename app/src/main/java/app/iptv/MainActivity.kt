@@ -1508,6 +1508,13 @@ class MainActivity : Activity() {
     }
 
     fun hx(u: String) = Integer.toHexString(u.hashCode())
+
+    // Reload button: forgets the channel logos and the in-memory guide caches; playlists and guides are re-downloaded by activate(refresh = true),
+    // which keeps the old file (and the guide already imported) for any source whose download fails
+    fun clearLogoAndGuideCaches() {
+        cacheDir.listFiles()?.filter { it.name.startsWith("lg") }?.forEach { it.delete() }
+        logos.evictAll(); failed.clear(); progCache.evictAll(); descCache.evictAll(); thumbs.evictAll()
+    }
     fun cleanCache() {
         val keep = HashSet<String>()
         for (s in sources) { keep.add("l" + hx(s.m3u)); epgUrls(s).forEach { keep.add("e" + hx(it)) } }
@@ -2778,9 +2785,10 @@ if(!G.length){var p=document.createElement('p');p.className='sub';p.textContent=
         val views = ArrayList<View>()
         views.add(TextView(this).apply { text = if (url != null) "Scan with your phone to manage playlists, EPGs and favorites order, or open\n$url" else "No network"; textSize = 18f; setTextColor(0xFFB8BECC.toInt()) })
         if (url != null) views.add(ImageView(this).apply { setImageBitmap(qr(url)) })
+        views.add(TextView(this).apply { text = "\"Reload\" downloads the playlists, guides and channel logos again from scratch. If a download fails, the previous copy is kept."; textSize = 15f; setTextColor(0xFF8A90A0.toInt()) })
         val d = showPanel("Playlist & EPG Setup", views, listOf(
             DBtn("Close", C_FIELD) { it.dismiss() },
-            DBtn("Reload", C_FIELD) { it.dismiss(); activate(act, true) },
+            DBtn("Reload", C_FIELD) { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() },
             DBtn("Add here", C_PUR) { it.dismiss(); addSource() }))
         d.setOnDismissListener { stopServer() }
         dlg = d
