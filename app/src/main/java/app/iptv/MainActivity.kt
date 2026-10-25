@@ -171,6 +171,31 @@ fun seasonId(t: Long): Int {
     return 0
 }
 
+// what today's icon celebrates, shown under the Seasonal decorations setting
+fun seasonName(id: Int): String = when (id) {
+    SE_PARTY -> "New Year"
+    SE_HEART -> "Valentine's Day"
+    SE_FLAG_EE -> "Estonian Independence Day"
+    SE_BUN -> "Vastlapäev (Shrove Tuesday)"
+    SE_WILLOW -> "Palm Sunday"
+    SE_EGG -> "Easter"
+    SE_VAPPU -> "May Day (Vappu)"
+    SE_WREATH -> "Midsummer"
+    SE_FIREWORK -> "Independence Day (US)"
+    SE_CORNFLOWER -> "Estonian Day of Restoration of Independence"
+    SE_LEAF -> "Autumn"
+    SE_CAKE -> "Hert's birthday! (the creator of this app)"
+    SE_PUMPKIN -> "Halloween season"
+    SE_BAT -> "Halloween"
+    SE_ACORN -> "November"
+    SE_TURKEY -> "Thanksgiving"
+    SE_FLAG_FI -> "Finnish Independence Day"
+    SE_HAT -> "December"
+    SE_HAT_GIFT -> "Christmas"
+    in SE_CANDLES..SE_CANDLES + 3 -> "Advent, candle ${id - SE_CANDLES + 1}"
+    else -> ""
+}
+
 val THEMES = listOf(
     Theme("LiteTV Purple", 0xFF990AE3.toInt(), 0xFF130C1A.toInt(), 0xFF2F2B3C.toInt(), 0xFF20152D.toInt(), 0xFFD9B8F0.toInt(), 0xFF3A0057.toInt()),
     Theme("Ocean Blue", 0xFF0A84E3.toInt(), 0xFF0A1420.toInt(), 0xFF26323F.toInt(), 0xFF102235.toInt(), 0xFFB8D9F0.toInt(), 0xFF00315A.toInt()),
@@ -2245,7 +2270,7 @@ class MainActivity : Activity() {
     fun settingDesc(i: Int): String = when (i) {
         0 -> "Colour scheme of the menus and lists"
         1 -> "Size of the text on the TV screens"
-        2 -> "Holiday icons next to the selected row"
+        2 -> "Holiday icons next to the selected row" + season().let { if (it != 0) ". Today: " + seasonName(it) else "" }
         3 -> "Bigger = fewer stutters, slower channel start (applies when you leave Settings)"
         4 -> "Closes the app after this time (a warning shows first)"
         5 -> "How often the playlists are downloaded again"
