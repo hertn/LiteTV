@@ -277,6 +277,7 @@ class MainActivity : Activity() {
                 val fresh = urls.all { (epgAt[it] ?: 0L) > System.currentTimeMillis() - epgMaxAge() }
                 runOnUiThread { setChannels(all, boot, keepFav); syncScope() }   // the guide already in the database shows straight away
                 cleanCache()   // only after the screen has switched: it writes to the guide database, which is locked while a guide is being imported
+                preloadChannels()
                 ensureEpg(urls, refresh || (ready && !fresh)); epgChanged()
                 preloadOthers(refresh)
             } catch (e: Exception) { logErr("Playlist load failed: " + (e.message ?: e.javaClass.simpleName)); runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() } }

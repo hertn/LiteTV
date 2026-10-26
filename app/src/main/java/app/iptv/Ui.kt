@@ -143,6 +143,17 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun srcName(ch: Ch?): String =
         if (a.multi()) (ch?.let { k -> a.sources.find { it.id == k.src }?.name } ?: "") else (a.sources.getOrNull(a.act)?.name ?: "")
 
+    // wraps text into a box of this size; what does not fit is cut at the last whole line and ends in "..."
+    fun fitText(s: String, wPx: Int, hPx: Float, spacing: Float): StaticLayout {
+        var sl = StaticLayout(s, tp, wPx, Layout.Alignment.ALIGN_NORMAL, spacing, 0f, false)
+        val lh = sl.getLineBottom(0).toFloat(); val fit = maxOf(1, (hPx / lh).toInt())
+        if (sl.lineCount > fit) {
+            val t = s.substring(0, sl.getLineEnd(fit - 1)).trimEnd().dropLast(2).trimEnd() + "\u2026"
+            sl = StaticLayout(t, tp, wPx, Layout.Alignment.ALIGN_NORMAL, spacing, 0f, false)
+        }
+        return sl
+    }
+
     fun chips(c: Canvas, items: List<String>, x: Float, right: Boolean) {
         tp.textSize = 14 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD; val pad = 12 * d
         val ws = items.map { tp.measureText(it) + 2 * pad }; val tot = ws.sum()
@@ -274,13 +285,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         // right side like the Telia guide: the info box sits straight on top of the options bar, both start where the programme column ends
         val bx = px + pw; val bw = w - bx; val pr = dp.getOrNull(progI)
         if (pr != null) {
-            val bh = h * 0.27f; val by = S * rh - bh
+            val bh = h * 0.34f; val by = S * rh - bh
             fill(c, bx, by, bw, bh, INFO)
             txt(c, pr.title, bx + 24 * d, by + 42 * d, bw - 48 * d, 22f, -1, true)
             val ds = if (ch != null) a.descOf(ch, pr) else pr.desc
             if (ds.isNotEmpty()) {
                 tp.textSize = 15 * d * fs; tp.color = 0xFFD5DAE6.toInt(); tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
-                val sl = StaticLayout(ds, tp, (bw - 48 * d).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.15f, 0f, false)
+                val sl = fitText(ds, (bw - 48 * d).toInt(), bh - 72 * d, 1.15f)
                 c.save(); c.clipRect(bx, by + 56 * d, bx + bw, by + bh - 10 * d); c.translate(bx + 24 * d, by + 62 * d); sl.draw(c); c.restore()
             }
         }
@@ -696,11 +707,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val ds = a.descOf(ch, pr)
             if (ds.isNotEmpty()) {
                 tp.textSize = 19 * d * fs; tp.color = -1; tp.typeface = Typeface.DEFAULT; tp.textAlign = Paint.Align.LEFT
-                val sl = StaticLayout(ds, tp, (w * 0.55f).toInt(), Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, false)
-                c.save(); c.clipRect(x, h * 0.48f, x + w * 0.56f, h * 0.70f); c.translate(x, h * 0.48f); sl.draw(c); c.restore()
+                val sl = fitText(ds, (w * 0.53f).toInt(), h * 0.25f, 1.1f)
+                c.save(); c.clipRect(x, h * 0.47f, x + w * 0.54f, h * 0.73f); c.translate(x, h * 0.47f); sl.draw(c); c.restore()
             }
-            txt(c, "On air:  ${wdd.format(pr.start)} / ${a.hm.format(pr.start)}", w * 0.62f, h * 0.58f, w * 0.34f, 19f, -1, true)
-            txt(c, "Duration:  ${(pr.stop - pr.start) / 60000} min", w * 0.62f, h * 0.63f, w * 0.34f, 19f, -1, true)
+            txt(c, "On air:  ${wdd.format(pr.start)} / ${a.hm.format(pr.start)}", w * 0.72f, h * 0.58f, w * 0.26f, 19f, -1, true)
+            txt(c, "Duration:  ${(pr.stop - pr.start) / 60000} min", w * 0.72f, h * 0.63f, w * 0.26f, 19f, -1, true)
         }
         val cu = pr != null && pr.stop <= now && a.canCatchup(ch, pr); val bw0 = if (cu) w * 0.25f else w * 0.18f
         val py = h * 0.74f; p.color = LAV; c.drawRoundRect(RectF(x, py, x + bw0, py + h * 0.07f), h * 0.035f, h * 0.035f, p)
