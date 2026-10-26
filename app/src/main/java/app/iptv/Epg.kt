@@ -142,11 +142,22 @@ fun MainActivity.pastDays(u: String): Int {
 // reads one downloaded guide file straight into the database (nothing is collected in RAM); skipped when it was already imported
 fun MainActivity.importEpg(u: String, f: File) {
     val key = hx(u); val keep = wantedIds(u); val past = pastDays(u)
-    val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k3:$past"   // k2 = matching rules version (a new version re-imports the file once)
+    val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k4:$past"   // k2 = matching rules version (a new version re-imports the file once)
     if (prefs.getString("imp_$key", "") == mark) return
     val lo = dayStart() - past * 86400000L; val hi = dayStart() + epgDaysN * 86400000L
-    val fz = SimpleDateFormat("yyyyMMddHHmmss Z", java.util.Locale.US); val fl = SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
-    fun pt(s: String?): Long { val d = (s ?: "").trim(); return (if (d.length > 14) fz.parse(d) else fl.parse(d))!!.time }
+    val fl = SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
+    // hand-rolled "yyyyMMddHHmmss +0200" parser: SimpleDateFormat is the slowest part of reading a big guide on a TV box
+    fun pt(s: String?): Long {
+        val d = (s ?: "").trim()
+        if (d.length < 20 || d[15] != '+' && d[15] != '-') return fl.parse(d)!!.time   // no zone offset: local time
+        fun n(a: Int, b: Int): Int { var v = 0; for (k in a until b) { val c = d[k] - '0'; if (c < 0 || c > 9) throw IllegalArgumentException(d); v = v * 10 + c }; return v }
+        val y = n(0, 4); val mo = n(4, 6); val dd = n(6, 8)
+        val yy = if (mo <= 2) y - 1 else y; val era = yy / 400; val yoe = yy - era * 400
+        val doy = (153 * (if (mo > 2) mo - 3 else mo + 9) + 2) / 5 + dd - 1; val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        val days = era * 146097L + doe - 719468L
+        val off = (if (d[15] == '-') -1 else 1) * (n(16, 18) * 60 + n(18, 20))
+        return ((days * 24 + n(8, 10)) * 60 + n(10, 12) - off) * 60000L + n(12, 14) * 1000L
+    }
     var n = 0; var bad = false
     val db = epgDb
     val kc = HashMap<String, String>()   // guide channel id -> its key (so the key is only worked out once per channel, not once per programme)
@@ -172,7 +183,7 @@ fun MainActivity.importEpg(u: String, f: File) {
                             }
                         }
                         "title" -> if (ch.isNotEmpty() && ti.isEmpty()) ti = p.nextText()
-                        "desc" -> if (ch.isNotEmpty() && de.isEmpty()) de = p.nextText().take(300)
+                        "desc" -> if (ch.isNotEmpty() && de.isEmpty()) de = p.nextText().take(1000)
                     }
                 } else if (ev == XmlPullParser.END_TAG && p.name == "programme" && ch.isNotEmpty()) {
                     st.clearBindings(); st.bindString(1, key); st.bindString(2, ch); st.bindLong(3, s); st.bindLong(4, e); st.bindString(5, ti); st.bindString(6, de)
@@ -221,6 +232,15 @@ fun MainActivity.epgStatus(): String = when {
     epgFailed -> "Some EPG downloads failed. OK tries again"
     epgDoneAt > 0 -> "EPG up to date (updated ${hm.format(epgDoneAt)})"
     else -> "Download the EPG again right now"
+}
+
+// loads the channel lists of the other playlists (no guide), so favorites from all playlists show up before the slow guide import
+fun MainActivity.preloadChannels() {
+    for (o in sources.toList()) {
+        if (o.id == sources.getOrNull(act)?.id) continue
+        try { loadPlaylist(o, false) } catch (e: Exception) {}
+    }
+    runOnUiThread { if (grp == 0 && !searching) selectGroup(0, true) }
 }
 
 // loads every other playlist and its guide in the background so switching playlists is instant
