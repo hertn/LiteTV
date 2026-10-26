@@ -868,9 +868,10 @@ class MainActivity : Activity() {
         return true
     }
 
-    override fun onStop() { super.onStop(); player.pause(); stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick) }
+    override fun onStop() { super.onStop(); if (catchupProg == null) player.stop() else player.pause();   // live: let go of the hardware decoders while in the background; catch-up keeps its position
+        stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick) }
     override fun onStart() {
-        super.onStart(); if (cur != null) player.play()
+        super.onStart(); if (cur != null) { if (player.playbackState == Player.STATE_IDLE) { player.prepare(); player.playWhenReady = true } else player.play() }
         pv.removeCallbacks(updTick); pv.postDelayed(updTick, 30_000L)
         pv.removeCallbacks(epgTick); pv.postDelayed(epgTick, 60_000L)   // coming back from Home: refresh the guide a minute later if it is older than the refresh setting
     }

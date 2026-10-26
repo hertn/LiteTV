@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4
+
+- Fix "Decoding failed" on every channel after the TV had been on for a long time: the live stream now stops when you leave the app (Home, another app), so the TV's video decoders are freed instead of held in the background.
+
 ## 1.4.3
 
 - Program info boxes are bigger: the guide info box is taller, and on the full info page the description no longer runs into "On air" and "Duration". Text that still doesn't fit ends in "...".
