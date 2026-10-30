@@ -3,6 +3,13 @@
 
 # LiteTV
 
+<p align="center">
+  <a href="https://github.com/hertn/LiteTV/releases/latest"><img src="https://img.shields.io/github/v/release/hertn/LiteTV?style=flat&amp;labelColor=15181e&amp;color=2ea44f&amp;label=version" alt="Latest version"></a>
+  <a href="https://github.com/hertn/LiteTV#features"><img src="https://img.shields.io/badge/Android%20TV-app-3ddc84?style=flat&amp;labelColor=15181e&amp;logo=android&amp;logoColor=white" alt="Android TV app"></a>
+  <a href="https://github.com/hertn/LiteTV/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hertn/LiteTV?style=flat&amp;labelColor=15181e&amp;color=blue" alt="License"></a>
+  <a href="https://ko-fi.com/hertn"><img src="https://img.shields.io/badge/support-%E2%9D%A4%20Ko--fi-ff5e5b?style=flat&amp;labelColor=15181e&amp;logo=kofi&amp;logoColor=white" alt="Support on Ko-fi"></a>
+</p>
+
 A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists and guide (EPG) files; LiteTV plays the channels, shows what's on, and keeps memory use low.
 
 > LiteTV does not include or provide any channels, playlists or guide data. You add your own.
