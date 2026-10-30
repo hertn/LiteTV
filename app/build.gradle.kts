@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "app.iptv"
     compileSdk = 34
-    defaultConfig { applicationId = "app.iptv"; minSdk = 21; targetSdk = 34; versionCode = 11; versionName = "1.4.4" }
+    defaultConfig { applicationId = "app.iptv"; minSdk = 21; targetSdk = 34; versionCode = 12; versionName = "1.4.5" }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_1_8; targetCompatibility = JavaVersion.VERSION_1_8 }
     kotlinOptions { jvmTarget = "1.8" }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.5
+
+- New "Audio delay" tile in Channel settings to fix sound that is out of sync with the picture. It goes from -30 s to +30 s in 50 ms steps (Left / Right in the list jump 1 s; + = sound later, - = sound earlier; big delays pause the picture once while the player buffers ahead), is saved per channel, and is used again whenever that channel (or its catch-up) plays.
+
 ## 1.4.4
 
 - Fix "Decoding failed" on every channel after the TV had been on for a long time: the live stream now stops when you leave the app (Home, another app), so the TV's video decoders are freed instead of held in the background.
