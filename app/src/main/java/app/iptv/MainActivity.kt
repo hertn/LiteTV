@@ -31,8 +31,17 @@ import androidx.media3.common.*
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DefaultLivePlaybackSpeedControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LivePlaybackSpeedControl
+import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.source.TrackGroupArray
+import androidx.media3.exoplayer.trackselection.ExoTrackSelection
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.ui.PlayerView
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
@@ -66,6 +75,16 @@ class MainActivity : Activity() {
     val FAV_INNER = arrayOf("Order added", "Channel number", "A to Z")
     var errShown = false
     val arNames = arrayOf("Fit", "Zoom", "Stretch")
+    // audio delay per channel (saved as "avd:" + channel url, in ms); + = sound later, - = sound earlier
+    // every 50 ms from -30 s to +30 s; in the list Up/Down step 50 ms, Left/Right jump AVD_JUMP steps (1 s)
+    val AVD_MS = IntArray(1201) { (it - 600) * 50 }; val AVD_JUMP = 20
+    fun avdName(ms: Int): String {
+        val a = Math.abs(ms); val sign = if (ms > 0) "+" else if (ms < 0) "\u2212" else ""
+        return sign + if (a < 1000) "$a ms" else "${a / 1000}.${(a % 1000 / 10).toString().padStart(2, '0')} s"
+    }
+    val avdNames by lazy { AVD_MS.map { avdName(it) } }
+    @Volatile var avdUs = 0L   // read on the playback thread by the audio clock
+    fun avdMs(c: Ch) = prefs.getInt("avd:" + c.url, 0)
     // a stream that fails is retried a few times with a growing pause, then left alone until you pick the channel again
     var retryN = 0; val MAX_RETRY = 5
     // the last problems since the app started (newest first), shown in Settings > Error log
@@ -214,9 +233,44 @@ class MainActivity : Activity() {
     // builds the player (the buffer size is chosen here)
     fun makePlayer(): ExoPlayer {
         val ds = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10000)
-        val p = ExoPlayer.Builder(this, DefaultRenderersFactory(this).setEnableDecoderFallback(true))
+        // the audio clock is shifted by the channel's delay; video follows that clock, so the picture moves against the sound
+        val rf = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink? =
+                super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)?.let { sink ->
+                    object : ForwardingAudioSink(sink) {
+                        override fun getCurrentPositionUs(sourceEnded: Boolean): Long {
+                            val pos = super.getCurrentPositionUs(sourceEnded)
+                            return if (pos == AudioSink.CURRENT_POSITION_NOT_SET) pos else pos + avdUs
+                        }
+                    }
+                }
+        }
+        // when the picture is held back (sound earlier) the player's position trails the sound, so it would think it has
+        // more buffered than the sound really has: take the delay off before the buffer decisions
+        val lc = loadControl()
+        val lcAvd = object : LoadControl by lc {
+            fun real(b: Long) = if (avdUs < 0) maxOf(0L, b + avdUs) else b
+            // Java default methods are not delegated by `by`, so these are forwarded by hand
+            override fun onTracksSelected(timeline: Timeline, mediaPeriodId: MediaSource.MediaPeriodId, renderers: Array<out Renderer>, trackGroups: TrackGroupArray, trackSelections: Array<out ExoTrackSelection>) =
+                lc.onTracksSelected(timeline, mediaPeriodId, renderers, trackGroups, trackSelections)
+            override fun onTracksSelected(renderers: Array<out Renderer>, trackGroups: TrackGroupArray, trackSelections: Array<out ExoTrackSelection>) =
+                lc.onTracksSelected(renderers, trackGroups, trackSelections)
+            override fun shouldContinueLoading(playbackPositionUs: Long, bufferedDurationUs: Long, playbackSpeed: Float) =
+                lc.shouldContinueLoading(playbackPositionUs, real(bufferedDurationUs), playbackSpeed)
+            override fun shouldStartPlayback(timeline: Timeline, mediaPeriodId: MediaSource.MediaPeriodId, bufferedDurationUs: Long, playbackSpeed: Float, rebuffering: Boolean, targetLiveOffsetUs: Long) =
+                lc.shouldStartPlayback(timeline, mediaPeriodId, real(bufferedDurationUs), playbackSpeed, rebuffering, targetLiveOffsetUs)
+            override fun shouldStartPlayback(bufferedDurationUs: Long, playbackSpeed: Float, rebuffering: Boolean, targetLiveOffsetUs: Long) =
+                lc.shouldStartPlayback(real(bufferedDurationUs), playbackSpeed, rebuffering, targetLiveOffsetUs)
+        }
+        // with a delay set, live streams play at normal speed (catching up with the live edge would eat into the delay)
+        val ls = DefaultLivePlaybackSpeedControl.Builder().build()
+        val lsAvd = object : LivePlaybackSpeedControl by ls {
+            override fun getAdjustedPlaybackSpeed(liveOffsetUs: Long, bufferedDurationUs: Long) =
+                if (avdUs != 0L) 1f else ls.getAdjustedPlaybackSpeed(liveOffsetUs, bufferedDurationUs)
+        }
+        val p = ExoPlayer.Builder(this, rf.setEnableDecoderFallback(true))
             .setMediaSourceFactory(DefaultMediaSourceFactory(ds))
-            .setLoadControl(loadControl()).build()
+            .setLoadControl(lcAvd).setLivePlaybackSpeedControl(lsAvd).build()
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()   // subtitles off by default
         p.addListener(object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
@@ -455,9 +509,13 @@ class MainActivity : Activity() {
         return "Track $n"
     }
 
-    // options + index of the selected one for the channel-settings tiles: 0 audio, 1 subtitles, 2 aspect
+    // options + index of the selected one for the channel-settings tiles: 0 audio, 1 subtitles, 2 aspect, 3 audio delay
     fun subOpts(i: Int): Pair<List<String>, Int> {
         if (i == 2) return Pair(arNames.toList(), arMode)
+        if (i == 3) {
+            val ms = cur?.let { avdMs(it) } ?: 0
+            return Pair(avdNames, AVD_MS.indexOf(ms).coerceAtLeast(600))
+        }
         val text = i == 1; val type = if (text) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
         val names = ArrayList<String>(); var sel = 0
         val off = text && player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
@@ -476,6 +534,13 @@ class MainActivity : Activity() {
                 arMode = k.coerceIn(0, 2)
                 pv.resizeMode = intArrayOf(AspectRatioFrameLayout.RESIZE_MODE_FIT, AspectRatioFrameLayout.RESIZE_MODE_ZOOM, AspectRatioFrameLayout.RESIZE_MODE_FILL)[arMode]
                 flash("Aspect ratio: ${arNames[arMode]}", 1500)
+                return
+            }
+            if (i == 3) {
+                val c = cur ?: return; val ms = AVD_MS[k.coerceIn(0, AVD_MS.lastIndex)]
+                if (ms == 0) prefs.edit().remove("avd:" + c.url).apply() else prefs.edit().putInt("avd:" + c.url, ms).apply()
+                avdUs = ms * 1000L
+                flash("Audio delay: ${avdName(ms)}" + if (Math.abs(ms) >= 3000) "\nThe picture may pause while it catches up" else "", 2500)
                 return
             }
             val text = i == 1; val type = if (text) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
@@ -672,7 +737,7 @@ class MainActivity : Activity() {
 
     fun startPlay(c: Ch, url: String, cp: Prog?) {
         if (cur != null && cur != c) prev = cur
-        cur = c; catchupProg = cp
+        cur = c; catchupProg = cp; avdUs = avdMs(c) * 1000L
         catchupSrc = if (cp != null) url else null
         if (cp != null) { catchupBar.resetThumbs(); catchupBar.target = -1L; catchupBar.show() } else catchupBar.visibility = View.GONE
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)

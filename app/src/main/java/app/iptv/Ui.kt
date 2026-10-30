@@ -301,16 +301,17 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         a.season().let { if (it != 0 && ch != null) deco(c, it, if (sx > 0f) sx - rh * 0.1f else 0f, S * rh - rh * 0.39f, rh * 0.52f) }
     }
 
-    // "Channel settings": audio / subtitles / aspect tiles; OK on a tile pops its options up above it
+    // "Channel settings": audio / subtitles / aspect / audio delay tiles; OK on a tile pops its options up above it
     fun drawSub(c: Canvas, w: Float) {
         val rh = rowH(); val lw = w * 0.31f; val logoW = lw * 0.36f; val y = S * rh
         val ch = a.cur ?: a.shown.getOrNull(sel) ?: return
         fill(c, 0f, y, logoW, rh - 2, LOGOBG); drawLogo(c, ch, 0f, y, logoW, rh); border(c, 0f, y, logoW, rh)
-        val labels = listOf("Audio", "Subtitles", "Aspect ratio"); var x = logoW
-        for (i in 0..2) {
+        val labels = listOf("Audio", "Subtitles", "Aspect ratio", "Audio delay"); var x = logoW
+        for (i in 0..3) {
             val (opts, cs) = a.subOpts(i)
             tp.textSize = 17 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD
-            val tw = (maxOf(opts.maxOf { tp.measureText(it) }, tp.measureText(labels[i])) + 40 * d).coerceIn(w * 0.14f, w * 0.30f)
+            val wide = if (i == 3) listOf(opts.first()) else opts   // the delay list is long; its widest entry is the first
+            val tw = (maxOf(wide.maxOf { tp.measureText(it) }, tp.measureText(labels[i])) + 40 * d).coerceIn(w * 0.14f, w * 0.30f)
             val v = opts.getOrElse(cs) { "" }
             fill(c, x, y, tw - 2, rh - 2, if (i == subI) PUR else TILE)
             txt(c, v, x + 20 * d, y + rh * 0.50f, tw - 40 * d, 17f, -1, true)
@@ -771,11 +772,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 up -> if (subOpen) oj = (oj + dir).coerceIn(0, maxOf(0, n - 1))
                 dn -> if (subOpen) oj = (oj - dir).coerceIn(0, maxOf(0, n - 1))
-                lf -> if (!subOpen) subI = maxOf(0, subI - 1)
-                rt -> if (!subOpen) subI = minOf(2, subI + 1)
+                lf -> if (!subOpen) subI = maxOf(0, subI - 1) else if (subI == 3) oj = maxOf(0, oj - a.AVD_JUMP)
+                rt -> if (!subOpen) subI = minOf(3, subI + 1) else if (subI == 3) oj = minOf(n - 1, oj + a.AVD_JUMP)
                 ok -> if (subOpen) { a.subApply(subI, oj); subOpen = false } else {
                     val o = a.subOpts(subI)
                     if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true } else a.flash("Only one option available", 1500)
+                    if (subOpen && subI == 3) a.flash("Up / Down: 50 ms    Left / Right: 1 s", 3000)
                 }
             }
         } else if (mode == 5) {
