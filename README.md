@@ -1,7 +1,6 @@
-<img width="1280" height="640" alt="banner" src="https://github.com/user-attachments/assets/5616747e-c5e3-4220-abe7-893e4bbd99e0" />
-
-
-# LiteTV
+<h1 align="center">
+  <img src="https://github.com/user-attachments/assets/5616747e-c5e3-4220-abe7-893e4bbd99e0" width="100%" alt="LiteTV: lightweight live TV for Android TV">
+</h1>
 
 <p align="center">
   <a href="https://github.com/hertn/LiteTV/releases/latest"><img src="https://img.shields.io/github/v/release/hertn/LiteTV?style=flat&amp;labelColor=15181e&amp;color=2ea44f&amp;label=version" alt="Latest version"></a>
@@ -33,35 +32,20 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 
 ## Screenshots
 
-**Channel list**
-
-<img width="1920" height="1080" alt="channels" src="https://github.com/user-attachments/assets/b59a2fee-2f8a-4ebe-8c48-87f26783198e" />
-
-
-**TV guide**
-
-<img width="1920" height="1080" alt="guide" src="https://github.com/user-attachments/assets/d34b4a95-8ff8-4c81-843b-db770040b3ec" />
-
-
-**Program info**
-
-<img width="1920" height="1080" alt="program_info" src="https://github.com/user-attachments/assets/c7cf86b3-0e19-4f6a-9fd3-f058c7009536" />
-
-
-**Main menu**
-
-<img width="1920" height="1080" alt="main_menu" src="https://github.com/user-attachments/assets/33c0ef5d-5533-4224-a08e-45f05747f529" />
-
-
-**Settings**
-
-<img width="1920" height="1080" alt="settings" src="https://github.com/user-attachments/assets/15ee5859-1ceb-42a3-bf1b-031275e20726" />
-
-
-**Themes**
-
-<img width="1920" height="1080" alt="themes" src="https://github.com/user-attachments/assets/fa7262f8-f408-4c32-a1f4-0b4ee4d0f529" />
-
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/b59a2fee-2f8a-4ebe-8c48-87f26783198e" width="100%" alt="The channel list with logos, the program on now and its progress, and a bar with Watch, Program info and Channel guide"><br><b>Channel list</b></td>
+    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/d34b4a95-8ff8-4c81-843b-db770040b3ec" width="100%" alt="The TV guide for one channel: days down the side, programs by start time, and details of the selected program"><br><b>TV guide</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/c7cf86b3-0e19-4f6a-9fd3-f058c7009536" width="100%" alt="Program info: title, channel, category, description, air time, duration and a Watch button"><br><b>Program info</b></td>
+    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/33c0ef5d-5533-4224-a08e-45f05747f529" width="100%" alt="The main menu: Search, Playlists, TV guide, On air now, Show hidden, Last channel and Settings"><br><b>Main menu</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/15ee5859-1ceb-42a3-bf1b-031275e20726" width="100%" alt="Settings: theme, seasonal decorations, guide refresh, guide length and Update guide now"><br><b>Settings</b></td>
+    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/fa7262f8-f408-4c32-a1f4-0b4ee4d0f529" width="100%" alt="The theme picker with six themes plus Custom, and a live preview of the selected one"><br><b>Themes</b></td>
+  </tr>
+</table>
 
 ## Install
 
@@ -121,6 +105,10 @@ The code is Kotlin. The main app lives in `MainActivity.kt` and uses a custom dr
 - Guide data is kept in a local database on the TV and is refreshed from the guide links you provide. Only channels that exist in your playlists are stored.
 - How many days of guide you get depends on the guide file you use.
 - LiteTV is not affiliated with any playlist or guide provider.
+
+## Support
+
+LiteTV is free, with no ads or subscriptions. If you enjoy it, you can [buy me a coffee on Ko-fi](https://ko-fi.com/hertn).
 
 ## License
 
