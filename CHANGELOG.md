@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.6
+
+Audio delay fixes:
+
+- A saved negative delay (sound earlier) now shows correctly in Channel settings, instead of showing 0 ms and resetting to 0 when you press OK.
+- Catch-up skipping (+10 s / -10 s) and the catch-up bar no longer drift by the channel's delay on every press or seek.
+- Changing the delay while a channel plays no longer freezes the picture (when lowering it); the stream briefly reloads instead.
+- Switching between channels with different delays no longer glitches the last frames of the old channel.
+- Setting a delay before any channel has played now saves it for the channel shown, instead of doing nothing.
+- The delay list hint now says which way Left and Right go (Left: -1 s, Right: +1 s).
+
 ## 1.4.5
 
 - New "Audio delay" tile in Channel settings to fix sound that is out of sync with the picture. It goes from -30 s to +30 s in 50 ms steps (Left / Right in the list jump 1 s; + = sound later, - = sound earlier; big delays pause the picture once while the player buffers ahead), is saved per channel, and is used again whenever that channel (or its catch-up) plays.

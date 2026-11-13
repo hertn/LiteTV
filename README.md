@@ -23,7 +23,7 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 - Guide refresh setting (manual, every 6, 12, 24 or 48 hours) and an "Update guide now" button
 - Guide length setting (2 to 14 days, limited by what your guide file contains)
 - Favorites, hide/unhide channels, and search across all playlists
-- Audio track, subtitle and aspect ratio (fit, zoom, stretch) settings per channel
+- Audio track, subtitle, aspect ratio (fit, zoom, stretch) and audio delay (to fix out-of-sync sound) settings per channel
 - Channel logos and clear stream error messages (for example "Server returned HTTP 404 (stream not found)")
 - Themes: six built-in plus a custom theme where you pick your own colors
 - Seasonal decorations for holidays (can be turned off)

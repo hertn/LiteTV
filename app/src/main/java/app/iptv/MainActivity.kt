@@ -85,6 +85,10 @@ class MainActivity : Activity() {
     val avdNames by lazy { AVD_MS.map { avdName(it) } }
     @Volatile var avdUs = 0L   // read on the playback thread by the audio clock
     fun avdMs(c: Ch) = prefs.getInt("avd:" + c.url, 0)
+    // the player's clock runs ahead/behind by the delay; this is the position seekTo() works in
+    fun pos() = maxOf(0L, player.currentPosition - avdUs / 1000)
+    // the channel the settings tiles show: the playing one, else the highlighted one in the list
+    fun subCh() = cur ?: shown.getOrNull(ui.sel)
     // a stream that fails is retried a few times with a growing pause, then left alone until you pick the channel again
     var retryN = 0; val MAX_RETRY = 5
     // the last problems since the app started (newest first), shown in Settings > Error log
@@ -513,8 +517,8 @@ class MainActivity : Activity() {
     fun subOpts(i: Int): Pair<List<String>, Int> {
         if (i == 2) return Pair(arNames.toList(), arMode)
         if (i == 3) {
-            val ms = cur?.let { avdMs(it) } ?: 0
-            return Pair(avdNames, AVD_MS.indexOf(ms).coerceAtLeast(600))
+            val ms = subCh()?.let { avdMs(it) } ?: 0; val k = ms / 50 + 600   // AVD_MS[k] = (k - 600) * 50
+            return Pair(avdNames, if (ms % 50 == 0 && k in AVD_MS.indices) k else 600)
         }
         val text = i == 1; val type = if (text) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
         val names = ArrayList<String>(); var sel = 0
@@ -537,9 +541,13 @@ class MainActivity : Activity() {
                 return
             }
             if (i == 3) {
-                val c = cur ?: return; val ms = AVD_MS[k.coerceIn(0, AVD_MS.lastIndex)]
+                val c = subCh() ?: return; val ms = AVD_MS[k.coerceIn(0, AVD_MS.lastIndex)]
                 if (ms == 0) prefs.edit().remove("avd:" + c.url).apply() else prefs.edit().putInt("avd:" + c.url, ms).apply()
-                avdUs = ms * 1000L
+                if (c == cur) {
+                    // the clock jumps by the change and the player won't let it run backwards (picture would freeze); a seek resets it
+                    val p = pos(); avdUs = ms * 1000L
+                    if (player.isCurrentMediaItemSeekable) player.seekTo(p) else player.seekToDefaultPosition()
+                }
                 flash("Audio delay: ${avdName(ms)}" + if (Math.abs(ms) >= 3000) "\nThe picture may pause while it catches up" else "", 2500)
                 return
             }
@@ -737,7 +745,7 @@ class MainActivity : Activity() {
 
     fun startPlay(c: Ch, url: String, cp: Prog?) {
         if (cur != null && cur != c) prev = cur
-        cur = c; catchupProg = cp; avdUs = avdMs(c) * 1000L
+        cur = c; catchupProg = cp
         catchupSrc = if (cp != null) url else null
         if (cp != null) { catchupBar.resetThumbs(); catchupBar.target = -1L; catchupBar.show() } else catchupBar.visibility = View.GONE
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
@@ -747,6 +755,8 @@ class MainActivity : Activity() {
             if (cp != null) setMimeType(MimeTypes.APPLICATION_M3U8)
         }.build()
         player.setMediaItem(item); player.prepare(); player.playWhenReady = true
+        // set the new delay on the playback thread after the switch, so the old stream's last frames keep their clock
+        val us = avdMs(c) * 1000L; player.createMessage { _, _ -> avdUs = us }.send()
         if (cp == null) {
             prefs.edit().putString("last", c.url).apply()
             if (ui.mode == 0) banner.show(c)   // no banner while the lists are open
@@ -768,7 +778,7 @@ class MainActivity : Activity() {
     }
 
     fun skip(ms: Long) {
-        if (player.isCurrentMediaItemSeekable) { player.seekTo(maxOf(0L, player.currentPosition + ms)); flash(if (ms > 0) "+${ms / 1000} s" else "${ms / 1000} s", 1000) }
+        if (player.isCurrentMediaItemSeekable) { player.seekTo(maxOf(0L, pos() + ms)); flash(if (ms > 0) "+${ms / 1000} s" else "${ms / 1000} s", 1000) }
         else flash("This stream cannot be skipped", 1500)
     }
 

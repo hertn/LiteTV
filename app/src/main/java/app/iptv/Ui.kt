@@ -777,7 +777,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 ok -> if (subOpen) { a.subApply(subI, oj); subOpen = false } else {
                     val o = a.subOpts(subI)
                     if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true } else a.flash("Only one option available", 1500)
-                    if (subOpen && subI == 3) a.flash("Up / Down: 50 ms    Left / Right: 1 s", 3000)
+                    if (subOpen && subI == 3) a.flash("Up / Down: 50 ms    Left: \u22121 s    Right: +1 s", 3000)
                 }
             }
         } else if (mode == 5) {

@@ -67,7 +67,7 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
         val dur = a.player.duration; if (dur <= 0) return emptyList()
         val last = slot(maxOf(0L, dur - 2000L))
         val scrub = target >= 0
-        val c = slot(if (scrub) target else a.player.currentPosition)
+        val c = slot(if (scrub) target else a.pos())
         val order = ArrayList<Int>(); order.add(c)
         if (scrub) { for (k in 1..8) order.add(c + lastDir * k); for (k in 1..3) order.add(c - lastDir * k) }
         else for (k in 1..4) { order.add(c + k); order.add(c - k) }   // bar just opened: a few on each side of where you are
@@ -114,7 +114,7 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
         val p = a.player; val dur = p.duration
         if (dur <= 0 || !p.isCurrentMediaItemSeekable) { a.flash("This stream cannot be skipped", 1500); return }
         val step = if (rep >= 20) 60_000L else if (rep >= 8) 30_000L else 10_000L   // holding the key makes the steps bigger
-        val base = if (target >= 0) target else p.currentPosition
+        val base = if (target >= 0) target else a.pos()
         lastDir = dir
         target = (base + dir * step).coerceIn(0L, maxOf(0L, dur - 2000L))
         show(); removeCallbacks(commit)
@@ -135,7 +135,7 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
         val u = a.ui; val cp = a.catchupProg ?: return; val pl = a.player; val dur = pl.duration
         if (dur <= 0) return
         if (target < 0 && thumbLoading.isEmpty()) pumpThumbs()   // keeps the pictures around the playing spot ready (also once the length becomes known)
-        val pos = (if (target >= 0) target else pl.currentPosition).coerceIn(0L, dur); val buf = pl.bufferedPosition.coerceIn(0L, dur)
+        val pos = (if (target >= 0) target else a.pos()).coerceIn(0L, dur); val buf = pl.bufferedPosition.coerceIn(0L, dur)
         val w = width.toFloat(); val h = height.toFloat(); val d = u.d
         val gx = w * 0.06f; val bw = w * 0.88f; val rh = h / 7.5f * 1.1f; val y = h - rh - h * 0.07f
         u.fill(c, gx, y, bw, rh, u.ROW)
@@ -152,7 +152,7 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
         u.txt(c, tm(pos), tx, by + bh / 2 + 5 * d, 70 * d, 15f, -1, true)
         u.txt(c, tm(dur), bx + bww + 10 * d, by + bh / 2 + 5 * d, 70 * d, 15f, u.GRAY)
         if (target >= 0) {
-            val now = pl.currentPosition; val diff = Math.abs(target - now)
+            val now = a.pos(); val diff = Math.abs(target - now)
             val lab = tm(target) + "  (" + (if (target >= now) "+" else "-") + tm(diff) + ")"
             val hasTh = thumbUrl(0) != null
             val tw = (if (hasTh) 240 else 200) * d; val th = if (hasTh) 135 * d else 0f
