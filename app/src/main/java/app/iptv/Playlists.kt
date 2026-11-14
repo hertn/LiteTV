@@ -162,8 +162,8 @@ fun MainActivity.parseM3u(lines: Sequence<String>): List<Ch> {
         } else if (l.startsWith("#EXTINF")) {
             val a = re.findAll(l).associate { it.groupValues[1] to it.groupValues[2] }
             val q = l.lastIndexOf('"'); val cp = l.indexOf(',', maxOf(0, q))   // the name comes after the last comma that is outside the quotes
-            name = (if (cp >= 0) l.substring(cp + 1) else l.substringAfterLast(',')).trim(); id = a["tvg-id"] ?: ""; if (id.isEmpty()) id = name
-            g = a["group-title"]?.ifEmpty { null } ?: "Other"; logo = a["tvg-logo"] ?: ""; no = a["tvg-chno"]?.toIntOrNull() ?: 0
+            name = unent((if (cp >= 0) l.substring(cp + 1) else l.substringAfterLast(',')).trim()); id = a["tvg-id"] ?: ""; if (id.isEmpty()) id = name
+            g = a["group-title"]?.ifEmpty { null }?.let(::unent) ?: "Other"; logo = a["tvg-logo"] ?: ""; no = a["tvg-chno"]?.toIntOrNull() ?: 0
             cm = a["catchup"] ?: hm0; cs = a["catchup-source"] ?: hs0
             cd = a["catchup-days"]?.toIntOrNull() ?: a["tvg-rec"]?.toIntOrNull() ?: a["timeshift"]?.toIntOrNull() ?: hd0
             if (cm.isEmpty() && cs.isNotEmpty()) cm = "default"
@@ -174,3 +174,6 @@ fun MainActivity.parseM3u(lines: Sequence<String>): List<Ch> {
     }
     return out
 }
+
+// some playlists write "&" as "&amp;" (HTML style); show the real characters
+fun unent(s: String): String = if ('&' !in s) s else s.replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")

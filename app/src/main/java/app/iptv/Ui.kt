@@ -59,8 +59,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val PAST: Int get() = C_PAST
     val INFO: Int get() = C_INFO
     val GRAY = 0xFFB8BECC.toInt()
-    val BAR: Int get() = C_PUR
-    val TRACK = 0x55FFFFFF.toInt()
+    val BAR = 0xE6FFFFFF.toInt()
+    val TRACK = 0x40FFFFFF.toInt()
     val LAV: Int get() = T.lav
     val LAVT: Int get() = T.lavT
     val dd = java.text.SimpleDateFormat("dd.MM"); val wd = java.text.SimpleDateFormat("EEE"); val wdd = java.text.SimpleDateFormat("EEE dd.MM")
@@ -102,13 +102,19 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (off < over) postInvalidateOnAnimation() else if (el <= 0) postInvalidateDelayed(-el + 16)
     }
     fun fill(c: Canvas, x: Float, y: Float, w: Float, h: Float, color: Int) { p.color = color; c.drawRect(x, y, x + w, y + h, p) }
+    // tiles, rows and bars that float over the video get one shared corner radius
+    val RAD get() = 10 * d
+    fun rfill(c: Canvas, x: Float, y: Float, w: Float, h: Float, color: Int, r: Float = RAD) {
+        if (w <= 0f || h <= 0f) return
+        val rr = minOf(r, w / 2, h / 2); p.color = color; c.drawRoundRect(RectF(x, y, x + w, y + h), rr, rr, p)
+    }
     fun border(c: Canvas, x: Float, y: Float, w: Float, h: Float) {
-        p.style = Paint.Style.STROKE; p.strokeWidth = 3 * d; p.color = PUR
-        c.drawRect(x + 1.5f * d, y + 1.5f * d, x + w - 1.5f * d, y + h - 1.5f * d, p); p.style = Paint.Style.FILL
+        p.style = Paint.Style.STROKE; p.strokeWidth = 3 * d; p.color = PUR; val r = RAD - 1.5f * d
+        c.drawRoundRect(RectF(x + 1.5f * d, y + 1.5f * d, x + w - 1.5f * d, y + h - 1.5f * d), r, r, p); p.style = Paint.Style.FILL
     }
     fun progress(c: Canvas, x: Float, y: Float, w: Float, pr: Prog) {
         val f = ((System.currentTimeMillis() - pr.start).toFloat() / maxOf(1L, pr.stop - pr.start)).coerceIn(0f, 1f)
-        fill(c, x, y, w, 4 * d, TRACK); fill(c, x, y, w * f, 4 * d, BAR)
+        rfill(c, x, y, w, 4 * d, TRACK); rfill(c, x, y, w * f, 4 * d, BAR)
     }
     fun drawLogo(c: Canvas, ch: Ch, x: Float, y: Float, w: Float, h: Float) {
         val b = a.logoOf(ch)
@@ -123,19 +129,24 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     // option tiles are as wide as their text needs (long ones wrap onto two lines)
     fun optBar(c: Canvas, x: Float, y: Float, w: Float, h: Float, labels: List<String>) {
         tp.textSize = 17 * d * fs; tp.typeface = Typeface.DEFAULT_BOLD
-        val pad = 22 * d; val cap = w * 0.38f
-        val lines = labels.map { s -> if (tp.measureText(s) + 2 * pad <= cap) listOf(s) else split2(s) }
-        val ws = lines.map { ls -> (ls.maxOf { tp.measureText(it) } + 2 * pad).coerceIn(110 * d, cap) }
+        val cap = w * 0.38f
+        fun lay(pad: Float): Pair<List<List<String>>, List<Float>> {
+            val ls = labels.map { s -> if (tp.measureText(s) + 2 * pad <= cap) listOf(s) else split2(s) }
+            return ls to ls.map { l -> (l.maxOf { tp.measureText(it) } + 2 * pad).coerceIn(110 * d, cap) }
+        }
+        val pad = 20 * d; val (lines, ws) = lay(pad); val more = 30 * d   // room for the "more" arrow
         var start = 0
-        while (start < oi && ws.subList(start, oi + 1).sum() > w) start++
+        while (start < oi && ws.subList(start, oi + 1).sum() + 6 * d * (oi + 1 - start) > w - (if (oi < labels.size - 1) more else 0f)) start++
         var ix = x
         for (k in start until labels.size) {
-            if (ix >= x + w) break
-            val tw = ws[k]; fill(c, ix, y, minOf(tw, x + w - ix) - 2, h - 2, if (k == oi) PUR else TILE)
+            val tw = ws[k]
+            // a tile that would be cut off by the screen edge is not drawn; an arrow says there is more to the right
+            if (ix + tw + 6 * d > x + w - (if (k < labels.size - 1) more else 0f)) { txt(c, "\u203A", ix + 8 * d, y + h * 0.62f, more, 30f, -1, true); break }
+            rfill(c, ix + 3 * d, y, tw - 6 * d, h - 2, if (k == oi) PUR else TILE)
             val ls = lines[k]
             if (ls.size == 1) txt(c, ls[0], ix + pad, y + h * 0.58f, tw - 2 * pad, 17f, -1, true)
             else { txt(c, ls[0], ix + pad, y + h * 0.44f, tw - 2 * pad, 17f, -1, true); txt(c, ls[1], ix + pad, y + h * 0.70f, tw - 2 * pad, 17f, -1, true) }
-            ix += tw
+            ix += tw + 6 * d
         }
     }
     // time / date / playlist bar: sits below the options bar with a gap, in the same near-black as the panels
@@ -159,10 +170,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val ws = items.map { tp.measureText(it) + 2 * pad }; val tot = ws.sum()
         val gap = 6 * d; val y = rowH() * (S + 1) + gap; val hh = (height - y - gap).coerceIn(16 * d, 30 * d)
         var cx = if (right) x - tot else x
-        fill(c, cx, y, tot, hh, CHIP)
+        rfill(c, cx, y, tot, hh, CHIP, hh / 2)
         for ((i, s) in items.withIndex()) {
             txt(c, s, cx + pad, y + hh * 0.7f, ws[i], 14f, -1, true); cx += ws[i]
-            if (i < items.size - 1) fill(c, cx - 1, y + 5 * d, 1f, hh - 10 * d, 0x66FFFFFF)
+            if (i < items.size - 1) fill(c, cx - 1, y + 7 * d, 1f, hh - 14 * d, 0x55FFFFFF)
         }
     }
 
@@ -227,12 +238,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         for (s in 0..7) {
             val vi = vp - S + s; if (vi < 0 || vi >= n) continue
             val ch = a.shown[if (REVERSED) n - 1 - vi else vi]; val y = s * rh; val pr = a.now(ch); val on = s == S
-            fill(c, 0f, y, logoW, rh - 2, LOGOBG); fill(c, logoW, y, lw - logoW, rh - 2, ROW); drawLogo(c, ch, 0f, y, logoW, rh)
+            rfill(c, 0f, y, lw, rh - 4 * d, ROW); drawLogo(c, ch, 0f, y, logoW, rh - 4 * d)
             val tag = if (a.multi()) (a.sources.find { it.id == ch.src }?.let { "  \u00b7  ${it.name}" } ?: "") else ""
             stxt(c, "${ch.num}: ${ch.name}$tag", tx, y + rh * 0.24f, tmax, 13f, GRAY, false, on)
             stxt(c, pr?.title ?: "", tx, y + rh * 0.50f, tmax, 17f, -1, true, on)
             if (pr != null) { txt(c, "${a.hm.format(pr.start)} - ${a.hm.format(pr.stop)}", tx, y + rh * 0.74f, tmax, 13f, -1); progress(c, tx, y + rh * 0.84f, lw - tx - 10 * d, pr) }
-            if (on) border(c, 0f, y, lw, rh)
+            if (on) border(c, 0f, y, lw, rh - 4 * d)
         }
         a.shown.getOrNull(sel)?.let { optBar(c, lw, S * rh, w - lw, rh, a.chOptions(it, false)) }
         val now = System.currentTimeMillis()
@@ -251,7 +262,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
 
     fun cell(c: Canvas, x: Float, y: Float, w: Float, h: Float, selected: Boolean, focused: Boolean, bg: Int = ROW) {
-        fill(c, x, y, w - 2, h - 2, if (selected) SEL else bg); if (selected && focused) border(c, x, y, w - 2, h - 2)
+        rfill(c, x + 2 * d, y, w - 4 * d, h - 4 * d, if (selected) SEL else bg); if (selected && focused) border(c, x + 2 * d, y, w - 4 * d, h - 4 * d)
     }
 
     fun drawGuide(c: Canvas, w: Float, h: Float) {
@@ -268,12 +279,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 txt(c, if (i == ti) "Today" else if (i == ti + 1) "Tomorrow" else if (i == ti - 1) "Yesterday" else wd.format(day), dw / 2, y + rh * 0.78f, dw, 14f, GRAY, false, true)
             }
             chAt(sel + rel)?.let { cc ->
-                cell(c, dw, y, cw, rh, false, false); fill(c, dw, y, cw - 2, rh - 2, LOGOBG); drawLogo(c, cc, dw, y, cw, rh)
-                if (on && col == 1) border(c, dw, y, cw - 2, rh - 2)   // after the logo, otherwise the logo background paints over it
+                cell(c, dw, y, cw, rh, false, false); drawLogo(c, cc, dw + 2 * d, y, cw - 4 * d, rh - 4 * d)
+                if (on && col == 1) border(c, dw + 2 * d, y, cw - 4 * d, rh - 4 * d)   // after the logo, otherwise the logo background paints over it
             }
             dp.getOrNull(progI - (s - S))?.let { pr ->   // upcoming shows above the selected one, finished shows below it
                 cell(c, px, y, pw, rh, false, false, if (pr.start > now) PAST else PROG)   // upcoming shows use the lighter grey; current and finished shows use the dark panel colour; selection is shown by the border only
-                if (on && col == 2) border(c, px, y, pw - 2, rh - 2)
+                if (on && col == 2) border(c, px + 2 * d, y, pw - 4 * d, rh - 4 * d)
                 txt(c, a.hm.format(pr.start), px + 14 * d, y + rh * 0.58f, 70 * d, 20f, -1, true)
                 val cu = ch != null && pr.start <= now && a.canCatchup(ch, pr)
                 if (cu) rewindMark(c, px + pw - 24 * d, y + rh * 0.5f, 7 * d)
@@ -286,7 +297,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val bx = px + pw; val bw = w - bx; val pr = dp.getOrNull(progI)
         if (pr != null) {
             val bh = h * 0.34f; val by = S * rh - bh
-            fill(c, bx, by, bw, bh, INFO)
+            rfill(c, bx + 4 * d, by, bw - 4 * d, bh - 4 * d, INFO, 14 * d)
             txt(c, pr.title, bx + 24 * d, by + 42 * d, bw - 48 * d, 22f, -1, true)
             val ds = if (ch != null) a.descOf(ch, pr) else pr.desc
             if (ds.isNotEmpty()) {
@@ -305,7 +316,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun drawSub(c: Canvas, w: Float) {
         val rh = rowH(); val lw = w * 0.31f; val logoW = lw * 0.36f; val y = S * rh
         val ch = a.cur ?: a.shown.getOrNull(sel) ?: return
-        fill(c, 0f, y, logoW, rh - 2, LOGOBG); drawLogo(c, ch, 0f, y, logoW, rh); border(c, 0f, y, logoW, rh)
+        rfill(c, 0f, y, logoW - 4 * d, rh - 4 * d, LOGOBG); drawLogo(c, ch, 0f, y, logoW - 4 * d, rh - 4 * d); border(c, 0f, y, logoW - 4 * d, rh - 4 * d)
         val labels = listOf("Audio", "Subtitles", "Aspect ratio", "Audio delay"); var x = logoW
         for (i in 0..3) {
             val (opts, cs) = a.subOpts(i)
@@ -313,7 +324,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val wide = if (i == 3) listOf(opts.first()) else opts   // the delay list is long; its widest entry is the first
             val tw = (maxOf(wide.maxOf { tp.measureText(it) }, tp.measureText(labels[i])) + 40 * d).coerceIn(w * 0.14f, w * 0.30f)
             val v = opts.getOrElse(cs) { "" }
-            fill(c, x, y, tw - 2, rh - 2, if (i == subI) PUR else TILE)
+            rfill(c, x, y, tw - 4 * d, rh - 4 * d, if (i == subI) PUR else TILE)
             txt(c, v, x + 20 * d, y + rh * 0.50f, tw - 40 * d, 17f, -1, true)
             txt(c, labels[i], x + 20 * d, y + rh * 0.74f, tw - 40 * d, 13f, -1)
             if (subOpen && i == subI) {
@@ -325,8 +336,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 for (j in 1..vis) {
                     val od = top + j - 1; if (od >= n) break
                     val k = if (dir == 1) od else n - 1 - od; val oy = y - j * rh * 0.85f
-                    fill(c, x, oy, tw - 2, rh * 0.85f - 2, if (k == oj) PUR else TILE)
-                    if (k == oj) { p.style = Paint.Style.STROKE; p.strokeWidth = 2 * d; p.color = -1; c.drawRect(x + d, oy + d, x + tw - 2 - d, oy + rh * 0.85f - 2 - d, p); p.style = Paint.Style.FILL }
+                    rfill(c, x, oy, tw - 4 * d, rh * 0.85f - 4 * d, if (k == oj) PUR else TILE)
+                    if (k == oj) { p.style = Paint.Style.STROKE; p.strokeWidth = 2 * d; p.color = -1; c.drawRoundRect(RectF(x + d, oy + d, x + tw - 4 * d - d, oy + rh * 0.85f - 4 * d - d), RAD - d, RAD - d, p); p.style = Paint.Style.FILL }
                     txt(c, (if (k == cs) "\u25CF " else "") + opts[k], x + 20 * d, oy + rh * 0.5f, tw - 40 * d, 17f, -1, true)
                 }
             }
@@ -554,7 +565,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 fill(c, 20 * d, y - sh + sh * 0.86f, pw - 40 * d, 1f, 0x33FFFFFF)
             }
             val on = i == setSel; val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
-            if (on) fill(c, 0f, y, pw - 2, ih - 2, PUR)
+            if (on) rfill(c, 8 * d, y + d, pw - 18 * d, ih - 4 * d, PUR)
             val tc = if (en) -1 else 0x66FFFFFF
             txt(c, row.first, 20 * d, y + ih * 0.42f, pw * 0.55f, 17f, tc, on)
             txt(c, a.settingDesc(i), 20 * d, y + ih * 0.80f, pw - 40 * d, 12f, if (!en) 0x55FFFFFF else if (on) 0xCCFFFFFF.toInt() else GRAY)
@@ -588,7 +599,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val top = maxOf(0, minOf(si - 3, items.size - rows))
         for (k in 0 until rows) {
             val i = top + k; val e = items.getOrNull(i) ?: break; val y = rh * (k + 1)
-            if (i == si) fill(c, 0f, y, pw - 2, rh - 2, PUR)
+            if (i == si) rfill(c, 8 * d, y + d, pw - 18 * d, rh - 4 * d, PUR)
             stxt(c, e, 20 * d, y + rh * 0.62f, pw - 40 * d, 16f, -1, false, i == si)
         }
         txt(c, if (items.isEmpty()) "BACK  close" else "UP / DOWN  scroll     OK  clear the log     BACK  close", 20 * d, h - 20 * d, pw - 40 * d, 13f, GRAY)
@@ -604,7 +615,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val top = maxOf(0, minOf(si - 3, names.size - rows))
         for (k in 0 until rows) {
             val i = top + k; val lab = names.getOrNull(i) ?: break; val y = rh * (k + 1)
-            if (i == si) fill(c, 0f, y, pw - 2, rh - 2, PUR)
+            if (i == si) rfill(c, 8 * d, y + d, pw - 18 * d, rh - 4 * d, PUR)
             val g = grpGrab && i == si
             stxt(c, (if (g) "\u25CF " else "   ") + lab, 20 * d, y + rh * 0.62f, pw - 34 * d, 18f, -1, g, i == si)
         }
@@ -677,7 +688,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         txt(c, "17:30", ax + 14 * d, by + u * 0.46f, 70 * d, 17f, -1, true); txt(c, "Upcoming show", ax + 84 * d, by + u * 0.46f, aw - 98 * d, 17f, -1, true)
         // options bar tiles
         val ty = oy + u * 1.9f; val tw = iw * 0.36f
-        fill(c, ax, ty, tw - 2, u * 0.7f, PUR); txt(c, "Watch", ax + 14 * d, ty + u * 0.46f, tw - 28 * d, 17f, -1, true)
+        rfill(c, ax, ty, tw - 4 * d, u * 0.7f, PUR); txt(c, "Watch", ax + 14 * d, ty + u * 0.46f, tw - 28 * d, 17f, -1, true)
         fill(c, ax + tw, ty, tw - 2, u * 0.7f, TILE); txt(c, "Program info", ax + tw + 14 * d, ty + u * 0.46f, tw - 28 * d, 17f, -1, true)
         // program info box
         val iy = oy + u * 2.85f
@@ -694,7 +705,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun drawInfo(c: Canvas, w: Float, h: Float) {
         val ch = infoCh ?: return; val pr = infoProg; val now = System.currentTimeMillis(); val x = w * 0.16f
         fill(c, 0f, 0f, w, h, withAlpha(T.tint, 0xB3))
-        fill(c, w * 0.885f, h * 0.10f, w * 0.095f, h * 0.065f, PUR)
+        rfill(c, w * 0.885f, h * 0.10f, w * 0.095f, h * 0.065f, PUR)
         txt(c, a.hm.format(now), w * 0.9325f, h * 0.10f + h * 0.045f, w * 0.09f, 26f, -1, true, true)
         drawLogo(c, ch, w * 0.885f, h * 0.17f, w * 0.095f, h * 0.1f)
         txt(c, pr?.title ?: ch.name, x, h * 0.30f, w * 0.68f, 44f, -1, true)
@@ -730,7 +741,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val top = maxOf(0, minOf(selI - 3, items.size - rows))
         for (k in 0 until rows) {
             val i = top + k; val lab = items.getOrNull(i) ?: break; val y = rh * (k + 1)
-            if (i == selI) fill(c, x, y, pw - 2, rh - 2, if (focused) PUR else SEL)
+            if (i == selI) rfill(c, x + 8 * d, y + d, pw - 18 * d, rh - 4 * d, if (focused) PUR else SEL)
             stxt(c, (if (i == activeI) "● " else "   ") + lab, x + 20 * d, y + rh * 0.62f, pw - 34 * d, 18f, -1, i == activeI, i == selI && focused)
         }
     }

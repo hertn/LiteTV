@@ -8,6 +8,13 @@ Update notices you can actually see:
 - When a new version is out, a message says so for 15 seconds every time the app starts, until you install it. Before, it showed only once, for 8 seconds.
 - The main menu shows "Settings ● Update" and Settings > App update shows the new version, even after the app or TV restarts.
 
+New look:
+
+- Rounded tiles and rows everywhere (channel list, guide, buttons, Channel settings, Settings and side panels), with small gaps between them.
+- Progress bars are white, so purple only marks what is selected.
+- The button bar under the channel list no longer runs off the screen: buttons that don't fit are hidden behind a "›" and slide in as you move right.
+- Category names like "Docs &amp; Factual" now show as "Docs & Factual".
+
 ## 1.4.6
 
 Audio delay fixes:
