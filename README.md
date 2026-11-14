@@ -34,16 +34,20 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 
 <table>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/b59a2fee-2f8a-4ebe-8c48-87f26783198e" width="100%" alt="The channel list with logos, the program on now and its progress, and a bar with Watch, Program info and Channel guide"><br><b>Channel list</b></td>
-    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/d34b4a95-8ff8-4c81-843b-db770040b3ec" width="100%" alt="The TV guide for one channel: days down the side, programs by start time, and details of the selected program"><br><b>TV guide</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channels.jpg" width="100%" alt="The channel list over a playing channel: logos, the program on now with its progress, and a bar with Watch, TV guide, Program info and Channel settings"><br><b>Channel list</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/guide.jpg" width="100%" alt="The TV guide: days down the side, programs by start time, and a description of the selected program"><br><b>TV guide</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/c7cf86b3-0e19-4f6a-9fd3-f058c7009536" width="100%" alt="Program info: title, channel, category, description, air time, duration and a Watch button"><br><b>Program info</b></td>
-    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/33c0ef5d-5533-4224-a08e-45f05747f529" width="100%" alt="The main menu: Search, Playlists, TV guide, On air now, Show hidden, Last channel and Settings"><br><b>Main menu</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info: title, channel, category, description, air time, duration and a Watch button"><br><b>Program info</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/categories.jpg" width="100%" alt="The channel list with the categories panel open: Favorites, All, True Crime, National News, Comedy and more"><br><b>Categories</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/15ee5859-1ceb-42a3-bf1b-031275e20726" width="100%" alt="Settings: theme, seasonal decorations, guide refresh, guide length and Update guide now"><br><b>Settings</b></td>
-    <td width="50%" align="center" valign="top"><img src="https://github.com/user-attachments/assets/fa7262f8-f408-4c32-a1f4-0b4ee4d0f529" width="100%" alt="The theme picker with six themes plus Custom, and a live preview of the selected one"><br><b>Themes</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="Channel settings: audio track, subtitles, aspect ratio and audio delay"><br><b>Channel settings</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/menu.jpg" width="100%" alt="The main menu: Search, Playlists, TV guide, On air now, Show hidden, Last channel and Settings"><br><b>Main menu</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/settings.jpg" width="100%" alt="Settings: themes, font size, seasonal decorations, buffer size, sleep timer, playlist and guide refresh, guide length"><br><b>Settings</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="The theme picker with six themes plus Custom, and a live preview of the selected one"><br><b>Themes</b></td>
   </tr>
 </table>
 
