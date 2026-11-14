@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LiteTV: free, lightweight IPTV player for Android TV</title>
+<meta name="description" content="LiteTV is a free, lightweight IPTV app for Android TV. Play your own M3U playlists with a full TV guide (EPG), favorites, themes and phone setup by QR code.">
+<link rel="canonical" href="https://hertn.github.io/LiteTV/">
+<meta name="theme-color" content="#1a1420">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="LiteTV">
+<meta property="og:title" content="LiteTV: free, lightweight IPTV player for Android TV">
+<meta property="og:description" content="Play your own M3U playlists on Android TV with a full TV guide, favorites and themes, using little memory. Free, no ads.">
+<meta property="og:url" content="https://hertn.github.io/LiteTV/">
+<meta property="og:image" content="https://hertn.github.io/LiteTV/banner.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="LiteTV: lightweight live TV for Android TV">
+<meta name="twitter:card" content="summary_large_image">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "LiteTV",
+  "description": "A free, lightweight live TV (IPTV) player for Android TV. Plays your own M3U playlists with a TV guide (EPG) stored on disk to keep memory use low.",
+  "url": "https://hertn.github.io/LiteTV/",
+  "applicationCategory": "MultimediaApplication",
+  "applicationSubCategory": "IPTV player",
+  "operatingSystem": "Android TV",
+  "downloadUrl": "https://github.com/hertn/LiteTV/releases/latest",
+  "screenshot": ["https://hertn.github.io/LiteTV/channels.png", "https://hertn.github.io/LiteTV/guide.png"],
+  "image": "https://hertn.github.io/LiteTV/icon.png",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "hertn", "url": "https://github.com/hertn" },
+  "sameAs": ["https://github.com/hertn/LiteTV"]
+}
+</script>
+
+<style>
+:root{
+  --bg:#141019; --surface:#1e1826; --surface-2:#2a2233; --line:#352c40;
+  --text:#f3eff7; --text-2:#b6abc2; --text-3:#8a7f96;
+  --accent:#9b0ee0; --accent-2:#d9b8f0; --on-accent:#fff; --r:14px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+header.hero{text-align:center;padding-top:72px;padding-bottom:40px}
+.hero img.icon{width:96px;height:96px;border-radius:22px}
+h1{font-size:clamp(2.2rem,6vw,3.4rem);line-height:1.08;margin:18px 0 8px;letter-spacing:-.02em}
+h1 span{color:var(--accent-2)}
+.tag{color:var(--text-2);margin:0 0 18px;font-size:1.2rem}
+.lede{max-width:640px;margin:0 auto 28px;font-size:1.1rem}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-block;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;border:1px solid var(--line)}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.btn:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+.note{color:var(--text-3);font-size:.9rem;margin-top:14px}
+figure{margin:0}
+.shot img{width:100%;height:auto;display:block;border-radius:var(--r);border:1px solid var(--line)}
+figcaption{color:var(--text-2);font-size:.9rem;margin-top:8px}
+section{padding-top:56px;padding-bottom:56px;border-top:1px solid var(--line)}
+h2{font-size:1.8rem;margin:0 0 20px;letter-spacing:-.01em}
+h3{font-size:1.05rem;margin:0 0 6px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.card p{margin:0;color:var(--text-2)}
+.shots2{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+ol.steps{padding-left:1.2em}
+ol.steps li{margin-bottom:10px}
+code{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:.9em}
+footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--text-3);font-size:.9rem;text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <header class="hero wrap">
+    <img class="icon" src="icon.png" width="96" height="96" alt="LiteTV icon">
+    <h1>Lite<span>TV</span></h1>
+    <p class="tag">Lightweight live TV for Android TV.</p>
+    <p class="lede">A free <strong>IPTV player for Android TV</strong>. Bring your own M3U playlists and guide (EPG) files; LiteTV plays the channels, shows what's on, and keeps memory use low.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/hertn/LiteTV/releases/latest">Download the APK</a>
+      <a class="btn" href="https://github.com/hertn/LiteTV">View on GitHub</a>
+    </div>
+    <p class="note">Free and open source (MIT), no ads. LiteTV does not include any channels, playlists or guide data: you add your own.</p>
+  </header>
+
+  <div class="wrap">
+    <figure class="shot">
+      <img src="channels.png" width="1920" height="1080" alt="LiteTV's channel list with channel logos, the program on now with its progress bar, and a bar with Watch, Program info and Channel guide">
+      <figcaption>The channel list: what's on now, at a glance.</figcaption>
+    </figure>
+  </div>
+
+  <section class="wrap" aria-labelledby="features">
+    <h2 id="features">An IPTV app made for the TV remote</h2>
+    <div class="grid">
+      <div class="card"><h3>Your M3U playlists</h3><p>Live channels from one or more M3U playlists, with quick switching, search across all of them, favorites and hidden channels.</p></div>
+      <div class="card"><h3>Full TV guide (EPG)</h3><p>Now and next on every channel, a guide screen by day and a program info page. 2 to 14 days, refreshed on a schedule.</p></div>
+      <div class="card"><h3>Low memory use</h3><p>The guide is stored on disk, not in RAM, so even long guides run smoothly on cheap Android TV boxes and sticks.</p></div>
+      <div class="card"><h3>Set up from your phone</h3><p>Scan a QR code and add playlists and guides on your phone instead of typing with the remote.</p></div>
+      <div class="card"><h3>Per-channel settings</h3><p>Audio track, subtitles, aspect ratio and audio delay to fix out-of-sync sound, plus clear stream error messages.</p></div>
+      <div class="card"><h3>Themes and backup</h3><p>Six themes plus your own colors, seasonal decorations, and a backup file for playlists, guides and favorites.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="look">
+    <h2 id="look">Screenshots</h2>
+    <div class="shots2">
+      <figure class="shot"><img src="guide.png" width="1920" height="1080" loading="lazy" alt="The TV guide for one channel: days down the side, programs by start time, and details of the selected program"><figcaption>TV guide</figcaption></figure>
+      <figure class="shot"><img src="program.png" width="1920" height="1080" loading="lazy" alt="Program info: title, channel, category, description, air time, duration and a Watch button"><figcaption>Program info</figcaption></figure>
+      <figure class="shot"><img src="menu.png" width="1920" height="1080" loading="lazy" alt="The main menu: Search, Playlists, TV guide, On air now, Show hidden, Last channel and Settings"><figcaption>Main menu</figcaption></figure>
+      <figure class="shot"><img src="themes.png" width="1920" height="1080" loading="lazy" alt="The theme picker with six themes plus Custom, and a live preview of the selected one"><figcaption>Themes</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="install">
+    <h2 id="install">Install on Android TV</h2>
+    <ol class="steps">
+      <li>Download the latest <a href="https://github.com/hertn/LiteTV/releases/latest">LiteTV APK</a>.</li>
+      <li>Turn on Developer options on the TV (Settings → Device Preferences → About, tap <strong>Build</strong> 7 times) and enable network debugging.</li>
+      <li>Install it with adb: <code>adb connect &lt;tv-ip&gt;:&lt;port&gt;</code> then <code>adb install -r LiteTV-x.y.z.apk</code></li>
+      <li>Open LiteTV, press OK, choose <strong>Playlists</strong> and scan the QR code to add your playlists from your phone.</li>
+    </ol>
+    <p>More details, remote control buttons and building from source are in the <a href="https://github.com/hertn/LiteTV#readme">README</a>.</p>
+  </section>
+
+  <section class="wrap" aria-labelledby="support">
+    <h2 id="support">Support</h2>
+    <p>LiteTV is free, with no ads or subscriptions. If you enjoy it, you can <a href="https://ko-fi.com/hertn">buy me a coffee on Ko-fi</a>.</p>
+  </section>
+</main>
+<footer class="wrap">
+  Made by <a href="https://github.com/hertn">hertn</a> with Claude. LiteTV is not affiliated with any playlist or guide provider.
+</footer>
+</body>
+</html>
