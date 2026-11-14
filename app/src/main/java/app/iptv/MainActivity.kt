@@ -200,6 +200,8 @@ class MainActivity : Activity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         prefs = getSharedPreferences("p", 0)
+        prefs.getString("updTag", null)?.let { t ->   // an update found before the restart, unless it is installed by now
+            if (isNewer(t, packageManager.getPackageInfo(packageName, 0).versionName ?: "0")) { updTag = t; updUrl = prefs.getString("updUrl", "") ?: ""; updState = 3 } }
         loadTheme()
         epgHours = prefs.getInt("epgH", 12); epgDaysN = prefs.getInt("epgD", 7).coerceIn(1, 30)
         bufIdx = prefs.getInt("buf", 0).coerceIn(0, BUF_NAMES.lastIndex); plDays = prefs.getInt("plD", 7).coerceIn(0, 60)
@@ -624,7 +626,7 @@ class MainActivity : Activity() {
 
     // main menu (OK button); the number is the icon id
     fun menuItems() = listOf(0 to "Search", 9 to "Playlists", 2 to "TV guide", 3 to "On air now", 4 to (if (showHidden) "Hide hidden" else "Show hidden"),
-        6 to "Last channel", 11 to "Settings" + (if (updState == 3 || updState == 5) "  \u25CF" else ""))
+        6 to "Last channel", 11 to (if (updState == 3 || updState == 5) "Settings  \u25CF Update" else "Settings"))
 
     fun menuAct(i: Int) {
         when (i) {
@@ -654,8 +656,8 @@ class MainActivity : Activity() {
 
     // silent = the background check: a failed one stays quiet, and a new version is announced once
     fun checkUpdate(silent: Boolean = false) {
-        if (updState == 1 || updState == 4 || (silent && (updState == 3 || updState == 5))) return
-        updState = 1; updRefresh()
+        if (updState == 1 || updState == 4 || (silent && updState == 5)) return
+        val before = updState; updState = 1; updRefresh()
         Thread {
             try {
                 val cn = java.net.URL(UPDATE_API).openConnection() as java.net.HttpURLConnection
@@ -672,21 +674,25 @@ class MainActivity : Activity() {
                     url.isEmpty() -> { updErr = "No APK attached to $tag"; updState = 6 }
                     else -> { updTag = tag; updUrl = url; updState = 3 }
                 }
+                // remember what was found, so a restart still shows it in the menu and Settings
+                when (updState) {
+                    2 -> prefs.edit().remove("updTag").remove("updUrl").apply()
+                    3 -> prefs.edit().putString("updTag", updTag).putString("updUrl", updUrl).apply()
+                }
             } catch (e: Exception) { updErr = e.message ?: "No connection"; updState = 6 }
             if (updState == 6) logErr("Update check failed: $updErr")
             if (updState == 2 || updState == 3) prefs.edit().putLong("updAt", System.currentTimeMillis()).apply()
-            if (silent && updState == 6) updState = 0
-            if (silent && updState == 3 && prefs.getString("updSeen", "") != updTag) {
-                prefs.edit().putString("updSeen", updTag).apply()
-                runOnUiThread { flash("Update available: $updTag. Open Settings > App update", 8000) }
-            }
+            if (silent && updState == 6) updState = if (before == 3) 3 else 0   // offline: keep a known update
+            if (silent && updState == 3) runOnUiThread { flash("New version $updTag is available. Open Settings > App update to install it", 15000) }
             updRefresh()
         }.start()
     }
 
-    // quiet check for a newer version: shortly after the app starts, then about every 12 hours while it is on screen
+    // quiet check for a newer version: every time the app starts, then about every 12 hours while it is on screen
+    var updStarted = false
     fun autoCheckUpdate() {
-        if (System.currentTimeMillis() - prefs.getLong("updAt", 0L) < 12 * 3600_000L) return
+        if (updStarted && System.currentTimeMillis() - prefs.getLong("updAt", 0L) < 12 * 3600_000L) return
+        updStarted = true
         checkUpdate(true)
     }
     val updTick: Runnable = object : Runnable { override fun run() { autoCheckUpdate(); pv.postDelayed(this, 3600_000L) } }
