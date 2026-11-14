@@ -7,7 +7,7 @@ Update notices you can actually see:
 - LiteTV now checks for a new version every time it starts (and then about every 12 hours while it runs), instead of skipping the check when one ran in the last 12 hours.
 - When a new version is out, a message says so for 15 seconds every time the app starts, until you install it. Before, it showed only once, for 8 seconds.
 - The main menu shows "Settings ● Update" and Settings > App update shows the new version, even after the app or TV restarts.
-- Category names like "Docs &amp; Factual" now show as "Docs & Factual".
+- Category names like `Docs &amp; Factual` now show as `Docs & Factual`.
 
 ## 1.4.6
 
