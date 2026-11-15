@@ -58,7 +58,7 @@ const val REVERSED = true   // Telia style: higher channel numbers above, UP = h
 const val ROW_SCALE = 0.95f // 1.0 = original layout; lower = rows slightly shorter, so the options bar, info box and chips sit higher (everything stays aligned)
 
 class MainActivity : Activity() {
-    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var ui: Ui; lateinit var blurLayer: BlurLayer; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
+    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var numV: TextView; lateinit var ui: Ui; lateinit var blurLayer: BlurLayer; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
     lateinit var player: ExoPlayer; lateinit var prefs: SharedPreferences
     lateinit var catchupBar: CatchupBar
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
@@ -74,7 +74,7 @@ class MainActivity : Activity() {
     val FAV_SORTS = arrayOf("Custom groups", "Order added", "Channel number", "A to Z", "Z to A")
     val FAV_INNER = arrayOf("Order added", "Channel number", "A to Z")
     var errShown = false
-    val arNames = arrayOf("Fit", "Zoom", "Stretch")
+    val arNames = arrayOf("Fit", "Zoom", "Wider", "Taller")   // Wider for bars at the sides (4:3 shows), Taller for bars top and bottom (films)
     // audio delay per channel (saved as "avd:" + channel url, in ms); + = sound later, - = sound earlier
     // every 50 ms from -30 s to +30 s; in the list Up/Down step 50 ms, Left/Right jump AVD_JUMP steps (1 s)
     val AVD_MS = IntArray(1201) { (it - 600) * 50 }; val AVD_JUMP = 20
@@ -179,7 +179,7 @@ class MainActivity : Activity() {
     }
 
     fun refreshTheme() {
-        root.setBackgroundColor(0xFF000000.toInt()); osd.background = dBg(withAlpha(T.panel, 0xF0), 0, 40f); msg.background = dBg(withAlpha(T.panel, 0xF0), 0, 24f)
+        root.setBackgroundColor(0xFF000000.toInt()); osd.background = dBg(withAlpha(T.panel, 0xF0), 0x1AFFFFFF, 28f); numV.background = dBg(withAlpha(T.panel, 0xF0), 0x1AFFFFFF, 28f); msg.background = dBg(withAlpha(T.panel, 0xF0), 0, 24f)
         ui.invalidate(); banner.invalidate()
     }
 
@@ -216,9 +216,17 @@ class MainActivity : Activity() {
         loadFavPrefs(); fontIdx = prefs.getInt("fontSize", 1).coerceIn(0, FONT_NAMES.lastIndex)
         root = FrameLayout(this); root.setBackgroundColor(0xFF000000.toInt())
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
-        osd = TextView(this).apply { setTextColor(-1); textSize = 20f; gravity = Gravity.CENTER; setPadding(px(40f).toInt(), px(22f).toInt(), px(40f).toInt(), px(22f).toInt()); visibility = View.GONE
-            maxWidth = (resources.displayMetrics.widthPixels * 0.7).toInt() }
-        root.addView(osd, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(64f).toInt() })
+        // notices: a small card in the top-right corner, where Apple TV shows notifications; nothing else lives there
+        osd = TextView(this).apply {
+            setTextColor(-1); setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px(28f)); gravity = Gravity.CENTER_VERTICAL; setLineSpacing(0f, 1.15f)
+            setPadding(px(30f).toInt(), px(26f).toInt(), px(34f).toInt(), px(26f).toInt()); compoundDrawablePadding = px(20f).toInt()
+            maxWidth = px(760f).toInt(); visibility = View.GONE }
+        root.addView(osd, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = px(36f).toInt(); rightMargin = px(36f).toInt() })
+        // the channel number while typing it: just the digits, big, in the same corner
+        numV = TextView(this).apply {
+            setTextColor(-1); setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px(84f)); typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+            minWidth = px(240f).toInt(); minHeight = px(150f).toInt(); setPadding(px(40f).toInt(), 0, px(40f).toInt(), 0); visibility = View.GONE }
+        root.addView(numV, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = px(36f).toInt(); rightMargin = px(36f).toInt() })
         msg = TextView(this).apply {   // stream errors: in the middle of the screen
             setTextColor(-1); textSize = 22f; gravity = Gravity.CENTER; setPadding(px(56f).toInt(), px(36f).toInt(), px(56f).toInt(), px(36f).toInt())
             maxWidth = (resources.displayMetrics.widthPixels * 0.7).toInt(); visibility = View.GONE
@@ -551,8 +559,12 @@ class MainActivity : Activity() {
     fun subApply(i: Int, k: Int) {
         try {
             if (i == 2) {
-                arMode = k.coerceIn(0, 2)
-                pv.resizeMode = intArrayOf(AspectRatioFrameLayout.RESIZE_MODE_FIT, AspectRatioFrameLayout.RESIZE_MODE_ZOOM, AspectRatioFrameLayout.RESIZE_MODE_FILL)[arMode]
+                arMode = k.coerceIn(0, arNames.lastIndex)
+                // channels send 16:9 with any 4:3 show or wide film inside it, black bars included, so the picture itself is scaled:
+                // Zoom enlarges it 1.33x (fills the screen, trims the edges), Wider / Taller stretch it one way only; subtitles stay as they are
+                pv.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                (pv.videoSurfaceView?.parent as? ViewGroup)?.clipChildren = false; pv.clipChildren = false   // a real 4:3 stream's frame is narrower than the screen
+                pv.videoSurfaceView?.apply { scaleX = if (arMode == 1 || arMode == 2) 4f / 3f else 1f; scaleY = if (arMode == 1 || arMode == 3) 4f / 3f else 1f }
                 flash("Aspect ratio: ${arNames[arMode]}", 1500)
                 return
             }
@@ -588,45 +600,64 @@ class MainActivity : Activity() {
     fun dBg(color: Int, stroke: Int = 0, r: Float = 14f): GradientDrawable =
         GradientDrawable().apply { setColor(color); cornerRadius = px(r); if (stroke != 0) setStroke(px(2f).toInt(), stroke) }
 
-    fun dEdit(h: String): EditText = EditText(this).apply {
-        hint = h; textSize = 20f; setSingleLine(); setPadding(px(28f).toInt(), px(20f).toInt(), px(28f).toInt(), px(20f).toInt())
+    fun ipx(v: Float) = px(v).toInt()
+    fun dEdit(h: String, icon: String = ""): EditText = EditText(this).apply {
+        hint = h; setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px(30f)); setSingleLine()
+        setPadding(ipx(24f), ipx(18f), ipx(24f), ipx(18f))
+        val ic = if (icon.isNotEmpty()) IconDrawable(icon, 0).also { it.setBounds(0, 0, ipx(30f), ipx(30f)); setCompoundDrawables(it, null, null, null); compoundDrawablePadding = ipx(16f) } else null
         fun look(f: Boolean) {   // focused field is white with dark text, like tvOS
             background = dBg(if (f) -1 else 0x1FFFFFFF); setTextColor(if (f) 0xFF1C1C1E.toInt() else -1)
             setHintTextColor(if (f) 0x8C1C1C1E.toInt() else 0x85FFFFFF.toInt())
+            ic?.let { it.color = if (f) 0x8C1C1C1E.toInt() else 0x85FFFFFF.toInt(); it.invalidateSelf() }
         }
         look(false); setOnFocusChangeListener { _, f -> look(f) }
     }
+    fun dText(t: String, size: Float, color: Int, tf: Typeface = Typeface.DEFAULT) = TextView(this).apply {
+        text = t; setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px(size)); setTextColor(color); typeface = tf; setLineSpacing(0f, 1.15f)
+    }
 
     var panelBox: View? = null   // the open popup, so the blur can redraw it
-    fun showPanel(title: String, views: List<View>, buttons: List<DBtn>, keyboard: Boolean = false, widthFrac: Double = 0.5): android.app.Dialog {
+    // pop-ups are cards on the left like the main menu: title, content, then rows like the menu's (the last one Cancel or Close)
+    fun showPanel(title: String, views: List<View>, buttons: List<DBtn>, keyboard: Boolean = false, width: Float = 520f): android.app.Dialog {
         val dlg = android.app.Dialog(this); dlg.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; clipChildren = false }
+        val ink = 0xFF1C1C1E.toInt(); val med = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         buttons.forEachIndexed { i, b ->
-            val t = TextView(this).apply {
-                text = b.label; textSize = 18f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
-                setPadding(px(44f).toInt(), px(20f).toInt(), px(44f).toInt(), px(20f).toInt()); isFocusable = true; isClickable = true
-                fun look(f: Boolean) {
-                    background = dBg(if (f) -1 else 0x24FFFFFF); setTextColor(if (f) 0xFF1C1C1E.toInt() else -1)
-                    animate().scaleX(if (f) 1.08f else 1f).scaleY(if (f) 1.08f else 1f).setDuration(120).start()
-                    elevation = if (f) px(12f) else 0f
+            val ic = IconDrawable(b.icon, -1)
+            val name = dText(b.label, 34f, -1, med).apply { setSingleLine() }
+            val tip = dText(b.tip, 24f, 0xA81C1C1E.toInt()).apply { visibility = View.GONE; setPadding(0, ipx(4f), ipx(24f), 0) }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; minimumHeight = ipx(80f); setPadding(ipx(26f), ipx(19f), 0, ipx(19f))
+                isFocusable = true; isClickable = true
+                addView(ImageView(this@MainActivity).apply { setImageDrawable(ic) }, LinearLayout.LayoutParams(ipx(34f), ipx(34f)).apply { topMargin = ipx(4f); rightMargin = ipx(24f) })
+                addView(LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; addView(name); addView(tip) }, LinearLayout.LayoutParams(0, -2, 1f))
+                fun look(f: Boolean) {   // the selected row turns white and grows a little, and shows its tip
+                    background = if (f) dBg(-1, 0, 14f) else null
+                    name.setTextColor(if (f) ink else -1); name.typeface = if (f) Typeface.DEFAULT_BOLD else med
+                    ic.color = if (f) ink else -1; ic.invalidateSelf()
+                    tip.visibility = if (f && b.tip.isNotEmpty()) View.VISIBLE else View.GONE
+                    animate().scaleX(if (f) 1.04f else 1f).scaleY(if (f) 1.04f else 1f).setDuration(120).start()
+                    elevation = if (f) px(10f) else 0f
                 }
                 look(false); setOnFocusChangeListener { _, f -> look(f) }
                 setOnClickListener { b.act(dlg) }
             }
-            row.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = px(20f).toInt() })
+            rows.addView(row, LinearLayout.LayoutParams(-1, -2).apply { if (i > 0) topMargin = ipx(10f) })
         }
         val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; background = MatBg(this@MainActivity, this, 28f)
-            clipChildren = false; clipToPadding = false
-            setPadding(px(56f).toInt(), px(48f).toInt(), px(56f).toInt(), px(44f).toInt())
-            addView(TextView(this@MainActivity).apply { text = title; setTextColor(-1); textSize = 24f; typeface = Typeface.DEFAULT_BOLD })
-            for (v in views) addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(28f).toInt() })
-            addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(40f).toInt() })
+            orientation = LinearLayout.VERTICAL; background = MatBg(this@MainActivity, this, 40f)
+            clipChildren = false; clipToPadding = false; setPadding(0, ipx(40f), 0, ipx(20f))
+            fun lp(top: Float) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = ipx(top); leftMargin = ipx(40f); rightMargin = ipx(40f) }
+            addView(dText(title, 44f, -1, Typeface.DEFAULT_BOLD), lp(0f))
+            views.forEachIndexed { i, v -> addView(v, lp(if (i == 0) 28f else 22f)) }
+            addView(View(this@MainActivity).apply { setBackgroundColor(0x14FFFFFF) }, LinearLayout.LayoutParams(-1, maxOf(1, ipx(1f))).apply { topMargin = ipx(26f); leftMargin = ipx(40f); rightMargin = ipx(40f) })
+            addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ipx(14f); leftMargin = ipx(20f); rightMargin = ipx(20f) })
         }
         dlg.setContentView(box)
         dlg.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
-            setLayout((resources.displayMetrics.widthPixels * widthFrac).toInt(), -2)
+            setLayout(ipx(width), -2)
+            attributes = attributes.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; x = ipx(36f) }   // the left edge, like every other card
             if (keyboard) setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
         }
         panelBox = box; dlg.show(); ui.blur.start()   // the blur keeps refreshing while the popup is open
@@ -634,12 +665,12 @@ class MainActivity : Activity() {
     }
 
     fun searchBox() {
-        val input = dEdit("Channel or show name"); var d: android.app.Dialog? = null
+        val input = dEdit("Channel or show", "search"); var d: android.app.Dialog? = null
         fun go() { val q = input.text.toString().trim(); d?.dismiss(); if (q.isNotEmpty()) search(q) }
         input.setOnEditorActionListener { _, _, _ -> go(); true }
-        d = showPanel("Search channels and shows on now", listOf(input), listOf(
-            DBtn("Cancel", C_FIELD) { it.dismiss() },
-            DBtn("Search", C_PUR) { go() }), keyboard = true)
+        d = showPanel("Search", listOf(input, dText("Finds channels and shows on now", 24f, 0xA3FFFFFF.toInt())), listOf(
+            DBtn("Search", C_PUR, "search") { go() },
+            DBtn("Cancel", C_FIELD, "x") { it.dismiss() }), keyboard = true)
     }
 
     // main menu (OK button); the number is the icon id
@@ -836,8 +867,19 @@ class MainActivity : Activity() {
         }
     }
 
-    fun flash(t: String, ms: Long = 2500) { osd.text = t; osd.visibility = View.VISIBLE; osd.bringToFront()   // above the menus, e.g. while changing subtitles
-        osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms) }
+    // a notice: the words before ": " in white, the rest in grey, with an icon that fits the message
+    fun flash(t: String, ms: Long = 2500) {
+        val k = t.indexOf(": ").let { if (it < 0 || t.indexOf('\n').let { n -> n in 0 until it }) t.length else it }
+        osd.text = android.text.SpannableString(t.replace(": ", "  ")).apply {
+            setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, k, 0)
+            if (k < length) setSpan(android.text.style.ForegroundColorSpan(0xA3FFFFFF.toInt()), k, length, 0)
+        }
+        val ic = when { t.startsWith("Reminder") -> "bell"; t.startsWith("Sleep") -> "moon"; t.startsWith("Aspect") -> "aspect"; t.startsWith("Audio delay") -> "delay"
+            t.contains("EPG") || t.contains("source") || t.startsWith("Load failed") -> "refresh"; t.contains("version") -> "down"; else -> "info" }
+        osd.setCompoundDrawables(IconDrawable(ic, -1).apply { setBounds(0, 0, px(30f).toInt(), px(30f).toInt()) }, null, null, null)
+        numV.visibility = View.GONE; osd.visibility = View.VISIBLE; osd.bringToFront()   // above the menus, e.g. while changing subtitles
+        osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms)
+    }
 
     fun zap(d: Int) {
         val l = if (shown.isNotEmpty()) shown else channels; if (l.isEmpty()) return
@@ -851,44 +893,34 @@ class MainActivity : Activity() {
     fun settings() {
         startServer()
         val ip = localIp(); val url = ip?.let { "http://$it:$PORT" }
-        val dp = resources.displayMetrics.density
-        fun label(t: String, sp: Float, col: Int, bold: Boolean = false, top: Int = 0) = TextView(this).apply {
-            text = t; textSize = sp; setTextColor(col); if (bold) typeface = Typeface.DEFAULT_BOLD; setLineSpacing(0f, 1.1f)
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = (top * dp).toInt() }
-        }
-        // text on the left, QR code on the right
+        // QR code on the left, beside the biggest text (what to do); the address is the small fallback
         val info = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
             if (url != null) {
-                addView(label("Manage from your phone", 20f, -1, true))
-                addView(label("Scan the code, or open this address in a browser on the same network", 16f, 0xA3FFFFFF.toInt(), top = 6))
-                addView(label(url, 18f, -1, true, 12))
-            } else addView(label("No network", 20f, -1, true))
-            addView(View(this@MainActivity).apply { setBackgroundColor(0x24FFFFFF); layoutParams = LinearLayout.LayoutParams(-1, (1 * dp).toInt()).apply { topMargin = (22 * dp).toInt() } })
-            addView(label("Reload", 18f, -1, true, 20))
-            addView(label("Downloads the playlists, guides and channel logos again from scratch. If a download fails, the previous copy is kept.", 16f, 0xA3FFFFFF.toInt(), top = 6))
+                addView(dText("Manage from your phone", 34f, -1, Typeface.DEFAULT_BOLD))
+                addView(dText("Scan with your phone camera", 25f, 0xA3FFFFFF.toInt()).apply { setPadding(0, ipx(10f), 0, 0) })
+                addView(dText("or open " + url.removePrefix("http://"), 22f, 0x85FFFFFF.toInt()).apply { setPadding(0, ipx(6f), 0, 0) })
+            } else addView(dText("No network", 34f, -1, Typeface.DEFAULT_BOLD))
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(info, LinearLayout.LayoutParams(0, -2, 1f))
             if (url != null) addView(ImageView(this@MainActivity).apply {
-                setImageBitmap(qr(url, 300)); background = dBg(-1, 0, 20f); setPadding(px(14f).toInt(), px(14f).toInt(), px(14f).toInt(), px(14f).toInt())
-            }, LinearLayout.LayoutParams((220 * dp).toInt(), (220 * dp).toInt()).apply { leftMargin = (32 * dp).toInt() })
+                setImageBitmap(qr(url, 300)); background = dBg(-1, 0, 14f); setPadding(ipx(12f), ipx(12f), ipx(12f), ipx(12f))
+            }, LinearLayout.LayoutParams(ipx(200f), ipx(200f)).apply { rightMargin = ipx(30f) })
+            addView(info, LinearLayout.LayoutParams(0, -2, 1f))
         }
-        val views = listOf<View>(body)
-        val d = showPanel("Playlist & EPG Setup", views, listOf(
-            DBtn("Close", C_FIELD) { it.dismiss() },
-            DBtn("Reload", C_FIELD) { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() },
-            DBtn("Add here", C_PUR) { it.dismiss(); addSource() }), widthFrac = 0.62)
+        val d = showPanel("Playlists & TV Guides", listOf(body), listOf(
+            DBtn("Add Playlist Here", C_PUR, "plus", "Type the address with the remote instead") { it.dismiss(); addSource() },
+            DBtn("Reload", C_FIELD, "refresh", "Downloads the playlists, guides and logos again. If a download fails, the old copy is kept.") { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() },
+            DBtn("Close", C_FIELD, "x") { it.dismiss() }), width = 680f)
         d.setOnDismissListener { stopServer() }
         dlg = d
     }
 
     fun addSource() {
         val n = dEdit("Name"); val m = dEdit("M3U URL"); val e = dEdit("EPG URL (optional)")
-        showPanel("Add playlist", listOf(n, m, e), listOf(
-            DBtn("Cancel", C_FIELD) { it.dismiss() },
-            DBtn("Add", C_PUR) { d ->
+        showPanel("Add Playlist", listOf(n, m, e), listOf(
+            DBtn("Add", C_PUR, "plus") { d ->
                 d.dismiss()
                 if (m.text.isNotBlank()) {
                     val sid = newId(); val nm = n.text.toString().trim().ifEmpty { "Source ${sources.size + 1}" }
@@ -896,10 +928,11 @@ class MainActivity : Activity() {
                     if (e.text.isNotBlank()) { epgs = epgs + Epg("o_$sid", "$nm EPG", e.text.toString().trim(), false, listOf(sid), sid); saveEpgs(epgs) }
                     saveSrcs(sources); activate(sources.lastIndex, true)
                 }
-            }), keyboard = true)
+            },
+            DBtn("Cancel", C_FIELD, "x") { it.dismiss() }), width = 680f, keyboard = true)
     }
 
-    val numRun = Runnable { val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { play(it) } }
+    val numRun = Runnable { numV.visibility = View.GONE; val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { if (it != cur) play(it) } }   // typing the channel already on does nothing
 
     // BACK is handled here (before any view sees it): a short press goes back, holding it exits the app completely
     var backLong = false; var okHold = false; var okLong = false
@@ -972,9 +1005,10 @@ class MainActivity : Activity() {
             KeyEvent.KEYCODE_MEDIA_PLAY -> player.playWhenReady = true
             KeyEvent.KEYCODE_MEDIA_PAUSE -> player.playWhenReady = false
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
+                if (catchupProg != null) return true   // catch-up ignores the number keys, so a stray press can't leave it
                 val d = k - KeyEvent.KEYCODE_0
                 if (d == 0 && numBuf.isEmpty()) prev?.let { play(it) }
-                else { numBuf += d; flash("Channel $numBuf", 1500); pv.removeCallbacks(numRun); pv.postDelayed(numRun, 1500) }
+                else { numBuf += d; numV.text = numBuf; osd.visibility = View.GONE; numV.visibility = View.VISIBLE; numV.bringToFront(); pv.removeCallbacks(numRun); pv.postDelayed(numRun, 1500) }
             }
             else -> return super.onKeyDown(k, e)
         }

@@ -7,7 +7,12 @@ import android.graphics.Path
 
 // line icons on a 24x24 grid (same shapes as the redesign mockups); stroke 2, round caps; "true" parts are filled
 val ICON_SRC: Map<String, List<Pair<String, Boolean>>> = mapOf(
-    "drop" to listOf("M12 3c3.5 4.2 6 7.4 6 10.5a6 6 0 0 1-12 0C6 10.4 8.5 7.2 12 3z" to false, "M9 14.5a3 3 0 0 0 3 3" to false),
+    "blur" to listOf("M9.6 12a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0z" to true, "M10.3 6.6a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0z" to true, "M10.3 17.4a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0z" to true, "M4.9 12a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0z" to true, "M15.7 12a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0z" to true, "M6.0 7.2a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0z" to true, "M15.6 7.2a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0z" to true, "M6.0 16.8a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0z" to true, "M15.6 16.8a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0z" to true, "M11.2 2a0.8 0.8 0 1 0 1.6 0a0.8 0.8 0 1 0 -1.6 0z" to true, "M11.2 22a0.8 0.8 0 1 0 1.6 0a0.8 0.8 0 1 0 -1.6 0z" to true, "M1.2 12a0.8 0.8 0 1 0 1.6 0a0.8 0.8 0 1 0 -1.6 0z" to true, "M21.2 12a0.8 0.8 0 1 0 1.6 0a0.8 0.8 0 1 0 -1.6 0z" to true),   // dots that fade outwards: a soft edge
+    "layers" to listOf("M15 9V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h3" to false, "M12 9h6a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3z" to false),   // one card over another
+    "bug" to listOf("M12 6a5.25 5.25 0 0 1 5.25 5.25v3.75a5.25 5.25 0 0 1 -10.5 0v-3.75a5.25 5.25 0 0 1 5.25 -5.25z" to false, "M3 11.25h3.75M17.25 11.25h3.75M3.75 17.25l3-1.5M20.25 17.25l-3-1.5M9 3.75l1.5 2.25M15 3.75l-1.5 2.25" to false),
+    "x" to listOf("M6 6l12 12M18 6L6 18" to false),
+    "plus" to listOf("M12 5v14M5 12h14" to false),
+    "back" to listOf("M14.5 6l-6 6 6 6" to false),   // the remote's Back button
     "search" to listOf("M4.0 10.5a6.5 6.5 0 1 0 13.0 0a6.5 6.5 0 1 0 -13.0 0z" to false, "M15.5 15.5L21 21" to false),
     "phone" to listOf("M9.0 2.5h6.0a2.5 2.5 0 0 1 2.5 2.5v14.0a2.5 2.5 0 0 1 -2.5 2.5h-6.0a2.5 2.5 0 0 1 -2.5 -2.5v-14.0a2.5 2.5 0 0 1 2.5 -2.5z" to false, "M10.5 18.5h3" to false),
     "guide" to listOf("M4.5 4.0h15.0a1.5 1.5 0 0 1 1.5 1.5v1.0a1.5 1.5 0 0 1 -1.5 1.5h-15.0a1.5 1.5 0 0 1 -1.5 -1.5v-1.0a1.5 1.5 0 0 1 1.5 -1.5z" to false, "M4.5 10.0h15.0a1.5 1.5 0 0 1 1.5 1.5v1.0a1.5 1.5 0 0 1 -1.5 1.5h-15.0a1.5 1.5 0 0 1 -1.5 -1.5v-1.0a1.5 1.5 0 0 1 1.5 -1.5z" to false, "M4.5 16.0h15.0a1.5 1.5 0 0 1 1.5 1.5v1.0a1.5 1.5 0 0 1 -1.5 1.5h-15.0a1.5 1.5 0 0 1 -1.5 -1.5v-1.0a1.5 1.5 0 0 1 1.5 -1.5z" to false),
@@ -42,6 +47,15 @@ val ICON_SRC: Map<String, List<Pair<String, Boolean>>> = mapOf(
 private val iconCache = HashMap<String, List<Pair<Path, Boolean>>>()
 private val iconM = Matrix()
 private val iconP = Path()
+
+// an icon as a Drawable, for the Android views in the pop-ups
+class IconDrawable(val k: String, var color: Int) : android.graphics.drawable.Drawable() {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    override fun draw(c: Canvas) { p.color = color; drawIcon(c, k, bounds.exactCenterX(), bounds.exactCenterY(), minOf(bounds.width(), bounds.height()).toFloat(), p) }
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(cf: android.graphics.ColorFilter?) {}
+    @Deprecated("") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+}
 
 // draws icon k centred on (cx, cy), sz px wide; the paint's colour or shader is used as is
 fun drawIcon(c: Canvas, k: String, cx: Float, cy: Float, sz: Float, p: Paint) {

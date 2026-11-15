@@ -46,7 +46,7 @@ import org.json.JSONObject
 // settings panel (Settings screen): rows, headings, descriptions and what each row does; the drawing is in Ui.drawSettings
 // settings panel rows: name to current value
 // rows: 0 Themes, 1 Font size, 2 Seasonal decorations, 3 Blur behind menus, 4 Transparency | 5 Buffer size, 6 Sleep timer | 7 Playlist refresh,
-//       8 Guide refresh, 9 Guide length, 10 Update EPG now | 11 Favorites sort, 12 Within groups, 13 Reorder groups | 14 App update, 15 Error log
+//       8 Guide refresh, 9 Guide length, 10 Update EPG now | 11 Favorites sort, 12 Within groups, 13 Reorder groups | 14 App update, 15 Error log, 16 About
 fun MainActivity.settingsItems() = listOf(
     "Themes" to themeNames()[themeIdx.coerceIn(0, THEMES.lastIndex)],
     "Font Size" to FONT_NAMES[fontIdx],
@@ -63,16 +63,14 @@ fun MainActivity.settingsItems() = listOf(
     "Within Groups" to FAV_INNER[favInner],
     "Reorder Groups" to "",
     "App Update" to when (updState) { 1 -> "Checking..."; 2 -> "Up to date"; 3 -> "$updTag available"; 4 -> "Downloading $updPct%"; 5 -> "Ready to install"; 6 -> "Failed"; else -> "" },
-    "Error Log" to (if (errLog.isEmpty()) "Empty" else "${errLog.size} entries"))
+    "Error Log" to (if (errLog.isEmpty()) "Empty" else "${errLog.size} entries"),
+    "About" to "")
 
 // icon in the little square at the start of each row
-val SETTING_ICONS = listOf("palette", "text", "leaf", "drop", "drop", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "down", "info")
+val SETTING_ICONS = listOf("palette", "text", "leaf", "blur", "layers", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "down", "bug", "info")
 
 // a heading above these rows
 fun MainActivity.settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 5 -> "PLAYBACK"; 7 -> "PLAYLISTS & TV GUIDE"; 11 -> "FAVORITES"; 14 -> "APP"; else -> null }
-
-// rows that are changed with LEFT / RIGHT
-fun MainActivity.settingArrows(i: Int): Boolean = i in 1..9 && i != 4 || i == 11 || i == 12
 
 // the explanation of the selected row (shown in the footer)
 fun MainActivity.settingDesc(i: Int): String = when (i) {
@@ -80,6 +78,7 @@ fun MainActivity.settingDesc(i: Int): String = when (i) {
     1 -> "Size of the text on the TV screens"
     2 -> "Holiday icons next to the selected row" + season().let { if (it != 0) ". Today: " + seasonName(it) else "" }
     3 -> if (android.os.Build.VERSION.SDK_INT < 24) "This TV is too old to copy the video picture (needs Android 7)"
+         else if (!seeThru) "Turn Transparency on to use the blur"
          else "Blurs the picture behind menus, like Apple TV. Turn it off if the TV feels slow. Off by default on TVs with 1 GB of memory or less"
     4 -> "See the picture through the menus. Off = solid menus, lighter on slow TVs"
     5 -> if (bufIdx == 0) "Channels start quickly. Best for most connections (applies when you leave Settings)" else "Channels take a moment longer to start but cope better with weak Wi-Fi (applies when you leave Settings)"
@@ -98,6 +97,7 @@ fun MainActivity.settingDesc(i: Int): String = when (i) {
     12 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
     13 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
     15 -> "Recent problems since the app started"
+    16 -> "Version, who made LiteTV, the source code and how to support it"
     else -> when (updState) {
         1 -> "Contacting GitHub..."
         2 -> "You have the latest version. OK checks again"
@@ -112,16 +112,9 @@ fun MainActivity.settingDesc(i: Int): String = when (i) {
 // "Within groups" and "Reorder groups" only apply to the Custom groups sort; blur needs Android 7
 fun MainActivity.settingEnabled(i: Int): Boolean = when (i) { 12, 13 -> favSort == 0; 3 -> seeThru && android.os.Build.VERSION.SDK_INT >= 24; else -> true }
 
-// what OK does on the selected row, for the key hint ("" = same as RIGHT)
-fun MainActivity.settingOkHint(i: Int): String = when {
-    !settingEnabled(i) -> ""
-    i == 0 -> "open themes"; i == 10 -> "update now"; i == 13 || i == 15 -> "open"; i in 2..4 -> "switch on / off"
-    i == 14 -> when (updState) { 3 -> "download"; 5 -> "install"; 1, 4 -> ""; else -> "check for update" }
-    else -> ""
-}
-
 // d = -1 (LEFT) or +1 (RIGHT / OK)
 fun MainActivity.settingAct(i: Int, d: Int) {
+    if (!settingEnabled(i)) return   // greyed-out rows (Blur with Transparency off, old Android) do nothing
     when (i) {
         0 -> if (d > 0) ui.openThemes()
         1 -> { fontIdx = (fontIdx + d + FONT_NAMES.size) % FONT_NAMES.size; prefs.edit().putInt("fontSize", fontIdx).apply() }
@@ -145,5 +138,6 @@ fun MainActivity.settingAct(i: Int, d: Int) {
         13 -> if (favSort == 0 && d > 0) ui.openFavGroups()
         14 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
         15 -> if (d > 0) ui.openLog()
+        16 -> if (d > 0) ui.openAbout()
     }
 }

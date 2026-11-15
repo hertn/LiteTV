@@ -47,7 +47,7 @@ data class Ch(val id: String, val name: String, val group: String, val url: Stri
 data class Prog(val start: Long, val stop: Long, val title: String, val desc: String)
 data class Src(val id: String, val name: String, val m3u: String)
 data class Epg(val id: String, val name: String, val url: String, val all: Boolean, val srcIds: List<String>, val owner: String = "")
-data class DBtn(val label: String, val color: Int, val act: (android.app.Dialog) -> Unit)
+data class DBtn(val label: String, val color: Int, val icon: String, val tip: String = "", val act: (android.app.Dialog) -> Unit)   // a pop-up row: icon, name, tip shown while selected
 
 // settings choices: guide refresh (hours, 0 = only by hand) and guide length (days)
 val REFRESH_OPTS = intArrayOf(0, 6, 12, 24, 48)

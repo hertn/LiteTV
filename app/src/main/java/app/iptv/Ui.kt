@@ -162,6 +162,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val tri = Path(); tri.moveTo(x + 2 * U, py - 36 * U); tri.lineTo(x - 27 * U, py); tri.lineTo(x + 2 * U, py + 36 * U); tri.close()
         mPath.op(tri, Path.Op.UNION); mat(c, mPath)   // no outline: the selected row's outline alone shows where focus is
     }
+    // the same card with the pointer underneath, aimed at the tile it belongs to (centre x = px)
+    fun matCardDown(c: Canvas, x: Float, y: Float, w: Float, h: Float, px: Float) {
+        mPath.reset(); mPath.addRoundRect(RectF(x, y, x + w, y + h), 26 * U, 26 * U, Path.Direction.CW)
+        val tri = Path(); tri.moveTo(px - 36 * U, y + h - 2 * U); tri.lineTo(px, y + h + 27 * U); tri.lineTo(px + 36 * U, y + h - 2 * U); tri.close()
+        mPath.op(tri, Path.Op.UNION); mat(c, mPath)
+    }
     fun progress(c: Canvas, x: Float, y: Float, w: Float, pr: Prog, h: Float = 5f) {
         val f = ((System.currentTimeMillis() - pr.start).toFloat() / maxOf(1L, pr.stop - pr.start)).coerceIn(0f, 1f)
         rr(c, x, y, w, h * U, h * U / 2, TRACK)
@@ -294,6 +300,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun openFavGroups() { grpSel = 0; grpGrab = false; show(9); invalidate() }
     fun openKeys() { rbSel = 0; rbSub = 0; show(12); invalidate() }
     fun openLog() { logSel = 0; show(10); invalidate() }
+    fun openAbout() { show(13); invalidate() }
     fun openSub() { quickHide = false; backMode = if (mode == 2) 2 else 1; subI = 0; subOpen = false; show(4); invalidate() }
     // from the player (OK, or a channel change): Back closes it, and UP/DOWN keep changing channels while no list is open
     fun openSubPlayer(quick: Boolean) {
@@ -330,6 +337,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             9 -> drawFavGroups(c, w, h)
             10 -> drawErrLog(c, w, h)
             12 -> { c.save(); c.translate(M, 0f); matOx = M; drawKeys(c, w - M, h); matOx = 0f; c.restore() }
+            13 -> { c.save(); c.translate(M, 0f); matOx = M; drawAbout(c, w - M, h); matOx = 0f; c.restore() }
             11 -> { drawReminder(c, w); postInvalidateDelayed(250) }
         }
     }
@@ -518,7 +526,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         // after a channel change: which buttons open the settings and the menu, so nobody has to guess
         val okL = a.keys.keys(KEY_ACTS[1]).firstOrNull()?.let { keyLabel(it) }
         val hint = (if (okL != null) listOf(okL to "Settings") else emptyList()) + listOf("Hold OK" to "Menu")
-        val hintW = hint.sumOf { (tw(it.first, 24f, 700) + 12 * U + tw(it.second, 24f) + 36 * U).toDouble() }.toFloat() - 36 * U
+        val hintW = keyHintW(hint)
         if (!tiles) keyHint(c, hint, w - 90 * U - hintW, y + 22 * U, hintW + 4 * U)
         val tmw = (if (tiles) px0 - 40 * U else w - 90 * U - hintW - 50 * U) - 290 * U
         txt(c, "${ch.num}: ${ch.name}", 290 * U, y - 21 * U, tmw, 26f, SEC)
@@ -534,32 +542,37 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             progress(c, bx0, ly - 4 * U, bx1 - bx0, pr, 8f); txt(c, e, bx1 + 22 * U, ly, ew + 4 * U, 24f, SEC, 600); live(c, w - 90 * U - lw, ly, 18f)
         }
         if (tiles) for (i in 0..3) {
-            val (opts, cs) = a.subOpts(i); val x = px0 + i * pitch; val on = i == subI && !subOpen
-            lift(c, on, x, ty0, tw0, th0, 1.06f) {
-                rr(c, x, ty0, tw0, th0, 14 * U, if (on) WHITE else if (i == subI) SELBG else 0x1FFFFFFF)
-                val col = if (on) ONF else WHITE
+            val (opts, cs) = a.subOpts(i); val x = px0 + i * pitch; val sel = i == subI && !subOpen
+            val one = opts.size <= 1; val on = sel && !one   // nothing to choose: dimmed like a greyed-out Settings row, and no white focus
+            lift(c, sel, x, ty0, tw0, th0, 1.06f) {
+                rr(c, x, ty0, tw0, th0, 14 * U, if (on) WHITE else if (sel) 0x3DFFFFFF else if (i == subI) SELBG else 0x1FFFFFFF)
+                val col = if (on) ONF else if (one && !sel) 0x66FFFFFF else WHITE
                 icon(c, ics[i], x + tw0 / 2, ty0 + 29 * U, 34 * U, col)
                 txt(c, opts.getOrElse(cs) { "" }, x + tw0 / 2, ty0 + 66 * U, tw0 - 16 * U, 26f, col, 700, Paint.Align.CENTER)
-                txt(c, short[i], x + tw0 / 2, ty0 + 96 * U, tw0 - 16 * U, 19f, if (on) ONF2 else SEC, 400, Paint.Align.CENTER)
+                txt(c, if (one && sel) "Only one" else short[i], x + tw0 / 2, ty0 + 96 * U, tw0 - 16 * U, 19f, if (on) ONF2 else if (one && !sel) 0x55FFFFFF else SEC, 400, Paint.Align.CENTER)
             }
             if (subOpen && i == subI) {
                 // the list above the tile: the highlighted value sits in the middle, its neighbours fade out; a tick marks the one in use
-                val qw = 430 * U; val qh = 520 * U; val qx = (x + tw0 - qw).coerceAtLeast(40 * U); val qy = ty0 - qh - 24 * U
-                matRect(c, qx, qy, qw, qh, 22 * U)
+                // up to 5 options: all of them in order, the card as tall as they are; more (audio delay): a wheel with the choice in the middle
+                val n = opts.size; val wheel = n > 5; val nr = if (wheel) 5 else n; val dly = i == 3
+                val qw = 430 * U; val qh = (90 + nr * 66 + (if (dly) 84 else 16)) * U; val qx = (x + tw0 - qw).coerceAtLeast(40 * U); val qy = ty0 - qh - 34 * U
+                matCardDown(c, qx, qy, qw, qh, x + tw0 / 2)
                 txt(c, labels[i], qx + 30 * U, qy + 46 * U, qw - 200 * U, 28f, WHITE, 700)
-                if (i == 3) txt(c, "this channel", qx + qw - 30 * U, qy + 46 * U, 160 * U, 20f, SEC, 400, Paint.Align.RIGHT)
-                val n = opts.size; val alphaJ = intArrayOf(0x59, 0x99, 0xFF, 0x99, 0x59)
-                for (j in 0..4) {
-                    val k = oj + (2 - j) * dir; if (k < 0 || k >= n) continue
-                    val f = j == 2; val ry = qy + 90 * U + j * 66 * U
+                if (dly) txt(c, "this channel", qx + qw - 30 * U, qy + 46 * U, 160 * U, 20f, SEC, 400, Paint.Align.RIGHT)
+                val alphaJ = intArrayOf(0x59, 0x99, 0xFF, 0x99, 0x59)
+                for (j in 0 until nr) {
+                    val k = if (wheel) oj + (2 - j) * dir else if (dir > 0) n - 1 - j else j   // UP moves to the row above, as in the wheel
+                    if (k < 0 || k >= n) continue
+                    val f = k == oj; val ry = qy + 90 * U + j * 66 * U
                     if (f) rr(c, qx + 16 * U, ry, qw - 32 * U, 60 * U, 14 * U, WHITE)
-                    val col = if (f) ONF else withAlpha(-1, alphaJ[j])
+                    val col = if (f) ONF else if (wheel) withAlpha(-1, alphaJ[j]) else WHITE
                     txt(c, opts[k], qx + 38 * U, ry + 30 * U, qw - 120 * U, if (f) 36f else 29f, col, if (f) 700 else 600)
                     if (k == cs) icon(c, "check", qx + qw - 54 * U, ry + 30 * U, 26 * U, col)
                 }
-                fill(c, qx + 30 * U, qy + qh - 74 * U, qw - 60 * U, U, HAIR)
-                val hint = if (i == 3) "▲▼  50 ms      ◀ ▶  1 s      OK  set" else "▲▼  choose      OK  set"
-                txt(c, hint, qx + 30 * U, qy + qh - 40 * U, qw - 60 * U, 21f, SEC)
+                if (dly) {   // the only list whose keys need explaining
+                    fill(c, qx + 30 * U, qy + qh - 74 * U, qw - 60 * U, U, HAIR)
+                    keyHint(c, listOf("UP / DOWN" to "50 ms", "◀ ▶" to "1 s"), qx + 30 * U, qy + qh - 40 * U, qw - 60 * U)
+                }
             }
         }
     }
@@ -605,6 +618,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val ms = 76 * U; drawMark(c, x + 40 * U, y + 34 * U, ms)
         val lx = x + 40 * U + ms + 22 * U; val ly = y + 34 * U + ms / 2
         txt(c, "Lite", lx, ly, 200 * U, 44f, WHITE, 700); txt(c, "TV", lx + tw("Lite", 44f, 700), ly, 200 * U, 44f, 0, 700, accent = true)
+        txt(c, a.verLabel, lx + tw("LiteTV", 44f, 700) + 20 * U, ly + 7 * U, 160 * U, 22f, TER)   // the version lives here (not in Settings)
         val bx = x + 20 * U; val bw = cw - 40 * U
         val sepY = y + listTop + (items.size - 1) * pitch + 4 * U
         fill(c, x + 40 * U, sepY, cw - 80 * U, U, HAIR)
@@ -631,38 +645,73 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 
     // ---------- settings: one line per setting; the selected row's explanation sits in the footer ----------
     fun drawSettings(c: Canvas, w: Float, h: Float) {
-        val pw = w * 0.46f; val t0 = 128 * U; val foot = h - M - 190 * U; val ih = 80 * U; val sh = 60 * U
+        val pw = 680 * U; val t0 = 128 * U; val foot = h - M - 20 * U; val ih = 80 * U; val sh = 60 * U
         glass(c, 0f, M, pw, h - 2 * M)
         txt(c, "Settings", 40 * U, 72 * U, pw - 80 * U, 44f, WHITE, 700)
         val items = a.settingsItems()
+        // the selected row grows to show what it does under its name (no footer); the text shares the row with the value on the right
+        val sv = items.getOrNull(setSel)?.second ?: ""; val dsz = 24f
+        tp.textSize = tsz(dsz); tp.typeface = REG
+        val dw = (pw - 150 * U - (if (sv.isNotEmpty()) tw(sv + "  ›", 29f, 600) + 30 * U else 0f)).toInt()
+        val dl = fitText(a.settingDesc(setSel), maxOf(1, dw), tsz(dsz) * 1.15f * 3.2f, 1.15f)
+        val dh = dl.height + 16 * U
         val ys = FloatArray(items.size); var yy = 0f   // top of every row inside the list (a section heading sits just above its first row)
-        for (i in items.indices) { if (a.settingSection(i) != null) yy += sh; ys[i] = yy; yy += ih }
-        val scroll = maxOf(0f, ys[setSel.coerceIn(0, items.lastIndex)] + ih + 20 * U - (foot - t0))
+        for (i in items.indices) { if (a.settingSection(i) != null) yy += sh; ys[i] = yy; yy += ih + (if (i == setSel) dh else 0f) }
+        val scroll = maxOf(0f, ys[setSel.coerceIn(0, items.lastIndex)] + ih + dh + 20 * U - (foot - t0))
         c.save(); c.clipRect(0f, t0, pw - U, foot); c.translate(0f, t0 - scroll)
         items.forEachIndexed { i, row ->
             val y = ys[i]
             a.settingSection(i)?.let { sec -> hdr(c, sec, 40 * U, y - 22 * U, pw - 80 * U) }
             val on = i == setSel; val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
-            lift(c, on, 12 * U, y + 3 * U, pw - 24 * U, ih - 6 * U, 1.025f) {
-                if (on) rr(c, 12 * U, y + 3 * U, pw - 24 * U, ih - 6 * U, 14 * U, WHITE)
+            val rh = ih + (if (on) dh else 0f)
+            lift(c, on, 12 * U, y + 3 * U, pw - 24 * U, rh - 6 * U, 1.025f) {
+                if (on) {
+                    rr(c, 12 * U, y + 3 * U, pw - 24 * U, rh - 6 * U, 14 * U, WHITE)
+                    tp.textSize = tsz(dsz); tp.typeface = REG; tp.color = withAlpha(ONF, 0xA8); tp.shader = null; tp.textAlign = Paint.Align.LEFT
+                    c.save(); c.translate(110 * U, y + ih - 14 * U); dl.draw(c); c.restore()
+                }
                 val col = if (on) ONF else if (en) WHITE else 0x66FFFFFF
                 rr(c, 40 * U, y + ih / 2 - 24 * U, 48 * U, 48 * U, 12 * U, if (on) 0x14000000 else 0x1AFFFFFF)
                 icon(c, SETTING_ICONS.getOrElse(i) { "info" }, 64 * U, y + ih / 2, 28 * U, col)
                 txt(c, row.first, 110 * U, y + ih / 2, pw * 0.5f, 31f, col, if (on) 600 else 500)
-                val open = i == 0 || i == 13 || i == 15
+                val open = i == 0 || i == 13 || i == 15 || i == 16
                 if (row.second.isNotEmpty() || open) txt(c, row.second + (if (open) "  ›" else ""), pw - 40 * U, y + ih / 2, pw * 0.42f, 29f,
                     if (on) ONF else if (en) SEC else 0x55FFFFFF, if (on) 600 else 400, Paint.Align.RIGHT)
             }
         }
         c.restore()
-        fill(c, 24 * U, foot, pw - 48 * U, U, HAIR)
-        para(c, a.settingDesc(setSel), 40 * U, foot + 22 * U, pw - 80 * U, 76 * U, 26f, SEC, 1.15f)
-        val okh = a.settingOkHint(setSel)
-        val keys = if (!a.settingEnabled(setSel)) listOf("BACK" to "close")
-            else if (a.settingArrows(setSel)) listOf("LEFT / RIGHT" to "change", "BACK" to "close")
-            else if (okh.isNotEmpty()) listOf("OK" to okh, "BACK" to "close") else listOf("BACK" to "close")
-        keyHint(c, keys, 40 * U, h - M - 72 * U, pw - 80 * U)
-        txt(c, "LiteTV ${a.verLabel}", 40 * U, h - M - 30 * U, pw - 80 * U, 20f, TER)
+    }
+    // ---------- about (mode 13): in the settings panel; QR codes open the GitHub page and Ko-fi on a phone ----------
+    private val aboutQr by lazy { listOf(a.qr("https://github.com/hertn/LiteTV", 300), a.qr("https://ko-fi.com/hertn", 300)) }
+    fun drawAbout(c: Canvas, w: Float, h: Float) {
+        val pw = 680 * U; val x = 40 * U; val iw = pw - 80 * U
+        glass(c, 0f, M, pw, h - 2 * M)
+        val ms = 120 * U; drawMark(c, x, M + 36 * U, ms)
+        val lx = x + ms + 26 * U; val ly = M + 36 * U + ms / 2
+        txt(c, "Lite", lx, ly - 18 * U, 300 * U, 52f, WHITE, 700); txt(c, "TV", lx + tw("Lite", 52f, 700), ly - 18 * U, 200 * U, 52f, 0, 700, accent = true)
+        txt(c, "Version " + a.verLabel.removePrefix("v"), lx, ly + 28 * U, iw - ms, 26f, SEC)
+        var y = M + 36 * U + ms + 40 * U
+        para(c, "A lightweight live TV app for Android TV. Add your own M3U playlists and TV guides; LiteTV doesn't include any channels.", x, y, iw, 110 * U, 27f, WHITE); y += 110 * U
+        // facts list, label left and value right, like Apple TV's Settings > General > About
+        val facts = listOf("Made By" to "hertn", "Price" to "Free, no ads", "Licence" to "Open source (MIT)",
+            "Library" to "${a.sources.size} playlists · ${a.sources.toList().flatMap { a.epgUrls(it) }.distinct().size} TV guides",
+            "This TV" to "${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE}")
+        val fh = 54 * U; y += 4 * U
+        facts.forEachIndexed { i, (k, v) ->
+            if (i > 0) fill(c, x, y, iw, U, HAIR)
+            txt(c, k, x, y + fh / 2, iw * 0.4f, 26f, SEC); txt(c, v, x + iw, y + fh / 2, iw * 0.6f, 26f, WHITE, 500, Paint.Align.RIGHT)
+            y += fh
+        }
+        // two QR cards side by side above the key hint
+        val gap = 22 * U; val cw = (iw - gap) / 2; val chh = 330 * U; val cy = h - M - 36 * U - chh
+        listOf(Triple("Help & Source", "github.com/hertn/LiteTV", 0), Triple("Support LiteTV", "ko-fi.com/hertn", 1)).forEach { (t, u, k) ->
+            val cx = x + k * (cw + gap)
+            val qs = 200 * U; val qx = cx + (cw - qs) / 2; val qy = cy + 24 * U
+            rr(c, qx - 8 * U, qy - 8 * U, qs + 16 * U, qs + 16 * U, 12 * U, WHITE)
+            p.shader = null; c.drawBitmap(aboutQr[k], null, RectF(qx, qy, qx + qs, qy + qs), p)
+            txt(c, t, cx + cw / 2, qy + qs + 42 * U, cw - 20 * U, 27f, WHITE, 600, Paint.Align.CENTER)
+            txt(c, u, cx + cw / 2, qy + qs + 76 * U, cw - 20 * U, 21f, TER, 400, Paint.Align.CENTER)
+        }
     }
     // ---------- remote buttons (mode 12): every action with its buttons; OK on a row adds a button or resets it ----------
     class KRow(val label: String, val chips: List<String>, val act: KeyAct?, val desc: String, val sec: String? = null, val reset: Boolean = false)
@@ -740,11 +789,20 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
     }
 
-    // "OK  open    BACK  close": keys in white, what they do in grey
+    // button hints: the remote's keys as caps like on Remote Buttons (Back is a "‹" cap), what they do in grey
+    fun hintCaps(k: String) = when (k) { "" -> emptyList(); "UP / DOWN" -> listOf("▲", "▼"); "OK or BACK" -> listOf("OK", "BACK"); else -> listOf(k) }
+    fun capW(s: String) = if (s == "BACK") 48 * U else maxOf(48 * U, tw(s, 22f, 700) + 26 * U)
+    fun keyHintW(keys: List<Pair<String, String>>) = keys.map { (k, v) -> hintCaps(k).sumOf { (capW(it) + 8 * U).toDouble() }.toFloat() + 4 * U + tw(v, 24f) }.sum() + 36 * U * (keys.size - 1)
     fun keyHint(c: Canvas, keys: List<Pair<String, String>>, x: Float, cy: Float, maxW: Float) {
         var tx = x
         for ((k, v) in keys) {
-            txt(c, k, tx, cy, maxW, 24f, WHITE, 700); tx += tw(k, 24f, 700) + 12 * U
+            val caps = hintCaps(k)
+            for (s in caps) {
+                val cw0 = capW(s); rr(c, tx, cy - 21 * U, cw0, 42 * U, 10 * U, 0x24FFFFFF)
+                if (s == "BACK") icon(c, "back", tx + cw0 / 2, cy, 26 * U, WHITE) else txt(c, s, tx + cw0 / 2, cy, cw0, 22f, WHITE, 700, Paint.Align.CENTER)
+                tx += cw0 + 8 * U
+            }
+            if (caps.isNotEmpty()) tx += 4 * U
             txt(c, v, tx, cy, maxW, 24f, SEC); tx += tw(v, 24f) + 36 * U
         }
     }
@@ -776,7 +834,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val pw = w * 0.62f; val items = a.errLog.toList()
         drawPanel(c, M, pw, h, "Error Log", items, logSel.coerceIn(0, maxOf(0, items.lastIndex)), -1, true, null, true)
         if (items.isEmpty()) txt(c, "No problems since the app started", M + 40 * U, h / 2, pw - 80 * U, 29f, SEC)
-        keyHint(c, if (items.isEmpty()) listOf("BACK" to "close") else listOf("UP / DOWN" to "scroll", "OK" to "clear the log", "BACK" to "close"), M + 40 * U, h - M - 40 * U, pw - 80 * U)
+        if (items.isNotEmpty()) keyHint(c, listOf("UP / DOWN" to "scroll", "OK" to "clear the log"), M + 40 * U, h - M - 40 * U, pw - 80 * U)   // Back needs no hint: it goes back everywhere
     }
 
     // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
@@ -787,7 +845,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val x = M + pw + 40 * U; val tw0 = w - x - 80 * U; var y = h * 0.3f
         fun line(k: String, v: String) { keyHint(c, listOf(k to v), x, y, tw0); y += 50 * U }
         if (grpGrab) { line("UP / DOWN", "move the group"); line("OK or BACK", "drop it here") }
-        else { line("UP / DOWN", "choose a group"); line("OK", "grab it to move"); line("BACK", "close") }
+        else { line("UP / DOWN", "choose a group"); line("OK", "grab it to move") }
         y += 20 * U
         txt(c, if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", x, y, tw0, 24f, SEC); y += 40 * U
         txt(c, "\"Other\" always stays last", x, y, tw0, 24f, SEC)
@@ -818,9 +876,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
             y += rh
         }
-        keyHint(c, listOf("OK" to "use", "BACK" to "cancel"), 40 * U, h - M - 36 * U, pw - 60 * U)
+        keyHint(c, listOf("OK" to "use"), 40 * U, h - M - 36 * U, pw - 60 * U)
         // preview: the only places the colour appears
-        val x = pw + w * 0.04f; val py = h * 0.16f; val pW = w * 0.56f; val pH = h * 0.66f
+        val x = pw + w * 0.04f; val pW = 760 * U; val pH = 520 * U; val py = (h - pH) / 2   // only as big as its contents, centred beside the list
         glass(c, x, py, pW, pH)
         hdr(c, "Where the colour shows", x + 40 * U, py + 48 * U, pW - 80 * U)
         val labels = listOf("Chosen option", "Reminders", "App name in the menu")   // the playing channel is a red dot now, not the theme colour
@@ -837,7 +895,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val t = THEMES[themeSel.coerceIn(0, THEMES.lastIndex)]
         para(c, (if (t.seasonal) "Seasonal themes also colour the menu background. " else "") +
             "The selected row is outlined in it too. Everything else stays neutral: white focus, " + (if (t.gold) "gold" else "white") + " progress bars, red for live.",
-            x + 40 * U, py + 520 * U, pW - 80 * U, 80 * U, 24f, SEC)
+            x + 40 * U, py + 420 * U, pW - 80 * U, 80 * U, 24f, SEC)
     }
 
     // ---------- program info: full-screen page over the video ----------
@@ -922,7 +980,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 8 }   // back to settings, preview dropped
                 mode == 8 -> { a.settingsDone(); mode = 3 }
                 mode == 9 -> { if (grpGrab) grpGrab = false else mode = 8 }   // drop the group, then back to settings
-                mode == 10 -> mode = 8                                      // back to settings
+                mode == 10 || mode == 13 -> mode = 8                        // back to settings
                 mode == 12 -> if (rbSub > 0) rbSub = 0 else mode = 3          // back to the main menu
                 else -> close()
             }
@@ -965,7 +1023,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 ok -> if (quickHide) quickHide = false   // after a channel change the first OK only picks the tiles up
                 else if (subOpen) { a.subApply(subI, oj); subOpen = false } else {
                     val o = a.subOpts(subI)
-                    if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true } else a.flash("Only one option available", 1500)
+                    if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true }   // one option: the tile is dimmed and says so
                 }
             }
         } else if (mode == 5) {
@@ -1003,6 +1061,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 ok && r?.reset == true -> { a.keys.reset(null); a.flash("All buttons reset", 2000) }
                 ok && r?.act != null -> { rbSub = 1; rbOpt = 0 }
             }
+        } else if (mode == 13) {
+            // About has nothing to select; only Back (handled above)
         } else if (mode == 10) {
             val n = a.errLog.size
             when { up -> logSel = maxOf(0, logSel - 1); dn -> logSel = minOf(maxOf(0, n - 1), logSel + 1); ok -> { a.errLog.clear(); logSel = 0 } }
@@ -1169,8 +1229,8 @@ class MatBg(val a: MainActivity, val host: View, val r: Float) : android.graphic
             p.color = withAlpha(T.panel, (T.alpha * 255).toInt())
         } else p.color = withAlpha(T.panel, 0xED)
         c.drawPath(path, p)
-        p.style = Paint.Style.STROKE; p.strokeWidth = 2 * k; p.color = withAlpha(T.accent, 0x99)
-        bd.inset(k, k); c.drawRoundRect(bd, rr, rr, p)
+        p.style = Paint.Style.STROKE; p.strokeWidth = 1.5f * k; p.color = 0x1AFFFFFF   // the same faint edge as every card (the theme colour is not for borders)
+        bd.inset(0.75f * k, 0.75f * k); c.drawRoundRect(bd, rr, rr, p)
     }
     override fun setAlpha(alpha: Int) {}
     override fun setColorFilter(cf: android.graphics.ColorFilter?) {}

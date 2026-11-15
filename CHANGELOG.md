@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.1.0
+
+A new About page, tidier pop-ups and notices, and aspect ratio settings that work on every channel.
+
+**Aspect ratio**
+
+- Most channels send a 16:9 picture even when a 4:3 show or a widescreen film is inside it with black bars, so the old Zoom and Stretch never did anything. The options are now **Fit**, **Zoom** (enlarges the picture and trims the edges), **Wider** (for bars at the sides) and **Taller** (for bars at the top and bottom).
+- Option lists with up to five choices show them all, without empty space, and point at the tile they belong to, like the button bar does.
+
+**Look and feel**
+
+- New **About** page at the bottom of Settings: version, what LiteTV is, your playlists and TV guides, this TV, and QR codes for the GitHub page and Ko-fi.
+- Search, Playlists & TV Guides and Add Playlist are now cards on the left, like the rest of the app, with rows like the main menu instead of big buttons. No more coloured border.
+- Settings is narrower, and the selected row explains itself under its name. The version number moved to the main menu, next to the LiteTV name.
+- Notices (reminders, sleep timer, aspect ratio and so on) appear as a small card in the top-right corner instead of over the menus.
+- Typing a channel number shows just the number, big, in the top-right corner.
+- Button hints show the remote's buttons as keys. Screens that you leave with Back no longer say so.
+- New icons for Blur Behind Menus, Transparency and Error Log.
+- The Themes preview card is only as big as its contents.
+
+**Fixes**
+
+- Audio or Subtitles with only one choice is dimmed and says "Only one", instead of showing a notice.
+- Typing the number of the channel you're already watching no longer restarts it.
+- The number buttons do nothing while you watch catch-up, so a stray press can't take you back to live.
+- With Transparency off, Blur Behind Menus can no longer be changed.
+
 ## 2.0.1
 
 Bug fixes, mostly for slower TVs like the Chromecast with Google TV HD.
