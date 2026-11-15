@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://github.com/user-attachments/assets/5616747e-c5e3-4220-abe7-893e4bbd99e0" width="100%" alt="LiteTV: lightweight live TV for Android TV">
+  <img src="docs/banner.png" width="100%" alt="LiteTV: lightweight live TV for Android TV">
 </h1>
 
 <p align="center">
@@ -17,15 +17,18 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 
 ## Features
 
+- A clean, Apple TV-style look: dark glass menus over the picture (blurred on TVs that can do it), big clear text and white focus
 - Live channels from one or more M3U playlists, with quick switching between playlists
-- TV guide (EPG): now/next on every channel, a full guide screen by day, and a program info page
+- TV guide (EPG): what's on now with minutes left, a guide by day for every channel, and a full program info page with what's on later
+- Reminders: press "Remind Me" on an upcoming show and LiteTV offers to switch when it starts
 - Guide stored on disk instead of RAM, so memory use stays low even with long guides
 - Guide refresh setting (manual, every 6, 12, 24 or 48 hours) and an "Update guide now" button
 - Guide length setting (2 to 14 days, limited by what your guide file contains)
 - Favorites, hide/unhide channels, and search across all playlists
-- Audio track, subtitle, aspect ratio (fit, zoom, stretch) and audio delay (to fix out-of-sync sound) settings per channel
+- Audio track, subtitle, aspect ratio and audio delay (to fix out-of-sync sound) settings per channel
+- Remote Buttons: see what every button does, add your own buttons, and hold OK for the menu on remotes without a Menu button
 - Channel logos and clear stream error messages (for example "Server returned HTTP 404 (stream not found)")
-- Themes: six built-in plus a custom theme where you pick your own colors
+- Themes: eight accent colours plus Christmas, Halloween and New Year themes
 - Seasonal decorations for holidays (can be turned off)
 - Set up playlists and guides from your phone by scanning a QR code
 - Backup and restore of playlists, guides and favorites
@@ -34,20 +37,24 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 
 <table>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/channels.jpg" width="100%" alt="The channel list over a playing channel: logos, the program on now with its progress, and a bar with Watch, TV guide, Program info and Channel settings"><br><b>Channel list</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/guide.jpg" width="100%" alt="The TV guide: days down the side, programs by start time, and a description of the selected program"><br><b>TV guide</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channels.jpg" width="100%" alt="The channel list over a playing nature show: channel logos, the show on now with its time and progress, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel"><br><b>Channel list</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/guide.jpg" width="100%" alt="The TV guide: Today and Tomorrow, a column of channel logos, the shows on BBC Earth by time, and a card with the live show's description and buttons"><br><b>TV guide</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info: title, channel, category, description, air time, duration and a Watch button"><br><b>Program info</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/categories.jpg" width="100%" alt="The channel list with the categories panel open: Favorites, All, True Crime, National News, Comedy and more"><br><b>Categories</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info for How Nature Works: LIVE badge, category, channel, time, minutes left, description, Watch Live, Favorite and Guide buttons, and a Later on row"><br><b>Program info</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/categories.jpg" width="100%" alt="The categories panel beside the channel list: Favorites, All, True Crime, National News, Sports On Now, Sci-Fi and more"><br><b>Categories</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="Channel settings: audio track, subtitles, aspect ratio and audio delay"><br><b>Channel settings</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/menu.jpg" width="100%" alt="The main menu: Search, Playlists, TV guide, On air now, Show hidden, Last channel and Settings"><br><b>Main menu</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channel-change.jpg" width="100%" alt="After changing to a football match: channel name, match title, 77 min left, ends 04:00, a live progress bar, and the hint OK Settings, Hold OK Menu"><br><b>Changing channel</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="Channel settings over a football match: tiles for audio track, subtitles, aspect ratio and audio delay"><br><b>Channel settings</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/settings.jpg" width="100%" alt="Settings: themes, font size, seasonal decorations, buffer size, sleep timer, playlist and guide refresh, guide length"><br><b>Settings</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="The theme picker with six themes plus Custom, and a live preview of the selected one"><br><b>Themes</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/menu.jpg" width="100%" alt="The main menu: Search, Playlists, TV Guide, Show Hidden, Last Channel, Remote Buttons and Settings, with the channel now playing at the bottom"><br><b>Main menu</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/remote-buttons.jpg" width="100%" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one"><br><b>Remote buttons</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/settings.jpg" width="100%" alt="Settings: Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Buffer Size, Sleep Timer and Playlist Refresh, with an explanation of the selected row"><br><b>Settings</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with a preview of where the colour shows"><br><b>Themes</b></td>
   </tr>
 </table>
 
@@ -66,7 +73,7 @@ Updating with `adb install -r` keeps your playlists and settings.
 
 ## First start
 
-1. Press OK on the remote to open the menu, then choose **Playlists**.
+1. Hold OK (or press Menu) on the remote to open the main menu, then choose **Playlists**.
 2. Scan the QR code with your phone (or open the address shown on the screen). The phone and the TV must be on the same Wi-Fi network.
 3. On the web page, add your playlists (a name and the M3U link) and press **Save**.
 4. Guides: either add an EPG link to a playlist on the same page, or open **Shared EPGs** to add one guide that you can apply to all playlists or only some. If a playlist has no guide set, LiteTV uses the one named in the M3U file's header, if it has one.
@@ -77,20 +84,22 @@ You can also use **Add here** on the TV to type a playlist in with the remote.
 
 | Button | What it does |
 | --- | --- |
-| OK / Menu | Open the main menu (while watching) |
+| Menu / Hold OK | Open the main menu (while watching) |
+| OK / Info | Channel settings: audio, subtitles, aspect ratio, audio delay |
 | Left | Open the channel list |
 | Right / Guide / Blue | Open the TV guide |
-| Up / Down | Next / previous channel |
-| Info | Show the channel banner |
+| Up / Down, CH+ / CH- | Change channel |
 | 0-9 | Type a channel number |
 | Back | Go to the last channel (or step back in menus) |
 | Hold Back | Exit the app completely |
 
+You can add your own buttons to any of these in **Remote Buttons** in the main menu.
+
 ## Main menu
 
-Search, Playlists, TV guide, On air now, Show/Hide hidden channels, Last channel and **Settings**.
+Search, Playlists, TV Guide, Show/Hide hidden channels, Last Channel, Remote Buttons and **Settings**.
 
-**Settings** holds Themes, Seasonal decorations, Guide refresh, Guide length and Update guide now.
+**Settings** holds Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Buffer Size, Sleep Timer, Playlist Refresh, Guide Refresh, Guide Length, Update EPG Now, favorites sorting, App Update and the Error Log.
 
 ## Backup
 
@@ -102,7 +111,7 @@ Open the phone setup page and use **Download backup** to save your playlists, gu
 2. Let Gradle sync.
 3. Build > Build APK(s), or press Run with your TV connected.
 
-The code is Kotlin. The main app lives in `MainActivity.kt` and uses a custom drawn interface (no layout XML for the screens) and Media3 ExoPlayer for playback.
+The code is Kotlin. `MainActivity.kt` runs the player, `Ui.kt` draws every screen by hand (no layout XML), and playback uses Media3 ExoPlayer.
 
 ## Notes
 

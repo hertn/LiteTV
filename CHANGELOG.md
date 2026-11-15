@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.0.0
+
+A whole new look, made to feel like an Apple TV app, plus reminders and remote button settings.
+
+**New look**
+
+- Dark glass menus over the picture, with white focus, rounded corners and bigger, clearer text. On TVs that can do it, the picture behind the menus is blurred (Settings > Blur Behind Menus).
+- New app icon and banner.
+- Themes are now one accent colour (Purple, Blue, Teal, Green, Yellow, Orange, Pink, Graphite), plus seasonal themes: Christmas, Halloween and New Year.
+- Seasonal decorations are newly painted, with one for each holiday.
+
+**Channel list and guide**
+
+- The channel list shows a LIVE badge, minutes left and a progress bar for what's on now. The playing channel keeps a grey box around its logo.
+- The guide is split into days, channel logos and the shows on the selected channel. The selected show's details and buttons sit in a card beside it.
+- Upcoming shows have a "Remind Me" button. When the show starts, a card asks if you want to switch to it.
+
+**Watching**
+
+- Changing channel shows the channel, the show, how many minutes are left and when it ends.
+- OK (or Info) opens Channel Settings: four tiles for audio, subtitles, aspect ratio and audio delay.
+- Hold OK to open the main menu, so remotes without a Menu button (like the Chromecast remote) can get there.
+- Program Info is a full page with the show's details and what's on later on that channel.
+
+**Remote Buttons**
+
+- New page in the main menu that lists what every button does.
+- Add your own buttons to any action, or reset them to the defaults.
+
+**Other**
+
+- Settings is one line per setting, with an explanation of the selected one at the bottom.
+- "On Air Now" left the main menu. Left opens the same list while watching.
+
 ## 1.4.7
 
 Update notices you can actually see:

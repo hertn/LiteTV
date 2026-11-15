@@ -107,7 +107,7 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
     val commit = Runnable { if (target >= 0) { a.player.seekTo(target); target = -1L; show() } }
     fun show() {
         val was = visibility == View.VISIBLE
-        visibility = View.VISIBLE; removeCallbacks(hide); postDelayed(hide, 6000); invalidate()
+        visibility = View.VISIBLE; removeCallbacks(hide); postDelayed(hide, 6000); invalidate(); a.ui.blur.start()
         if (!was && target < 0) pumpThumbs()   // bar just opened: start loading pictures around where you are
     }
     fun nudge(dir: Int, rep: Int) {
@@ -132,43 +132,43 @@ class CatchupBar(ctx: Context, val a: MainActivity) : View(ctx) {
     }
     override fun onDraw(c: Canvas) {
         if (visibility == View.VISIBLE) postInvalidateDelayed(500)
+        a.ui.beginShapes(this)
         val u = a.ui; val cp = a.catchupProg ?: return; val pl = a.player; val dur = pl.duration
         if (dur <= 0) return
         if (target < 0 && thumbLoading.isEmpty()) pumpThumbs()   // keeps the pictures around the playing spot ready (also once the length becomes known)
         val pos = (if (target >= 0) target else a.pos()).coerceIn(0L, dur); val buf = pl.bufferedPosition.coerceIn(0L, dur)
-        val w = width.toFloat(); val h = height.toFloat(); val d = u.d
-        val gx = w * 0.06f; val bw = w * 0.88f; val rh = h / 7.5f * 1.1f; val y = h - rh - h * 0.07f
-        u.fill(c, gx, y, bw, rh, u.ROW)
-        val tx = gx + 20 * d; val mw = bw - 40 * d
-        u.txt(c, cp.title, tx, y + rh * 0.27f, mw - 90 * d, 20f, -1, true)
-        if (!pl.playWhenReady) u.txt(c, "Paused", tx + mw - 80 * d, y + rh * 0.27f, 80 * d, 14f, u.LAV, true)
-        val chName = a.cur?.let { (if (it.num > 0) "${it.num}  " else "") + it.name + "  ·  " } ?: ""   // which channel this recording is from
-        u.txt(c, "$chName${u.wdd.format(cp.start)}  ${a.hm.format(cp.start)} - ${a.hm.format(cp.stop)}", tx, y + rh * 0.47f, mw, 14f, u.GRAY)
-        val bx = tx + 74 * d; val bww = mw - 148 * d; val by = y + rh * 0.66f; val bh = 8 * d
-        u.fill(c, bx, by, bww, bh, 0x40FFFFFF)
-        u.fill(c, bx, by, bww * buf / dur, bh, 0x66FFFFFF)
-        u.fill(c, bx, by, bww * pos / dur, bh, u.LAV)
-        pt.color = -1; c.drawCircle(bx + bww * pos / dur, by + bh / 2, 9 * d, pt)
-        u.txt(c, tm(pos), tx, by + bh / 2 + 5 * d, 70 * d, 15f, -1, true)
-        u.txt(c, tm(dur), bx + bww + 10 * d, by + bh / 2 + 5 * d, 70 * d, 15f, u.GRAY)
+        val w = width.toFloat(); val h = height.toFloat(); val U = w / 1920f; u.U = U
+        // same rounded panel as the channel banner; the bar is white, the knob shows where you are
+        val bw = w * 0.88f; val gx = (w - bw) / 2; val rh = 210 * U; val y = h - rh - h * 0.06f
+        u.matRect(c, gx, y, bw, rh, 24 * U)
+        val tx = gx + 36 * U; val mw = bw - 72 * U
+        u.txt(c, cp.title, tx, y + 50 * U, mw - 160 * U, 40f, -1, 700)
+        if (!pl.playWhenReady) u.txt(c, "Paused", tx + mw, y + 50 * U, 160 * U, 25f, -1, 700, android.graphics.Paint.Align.RIGHT)
+        val chName = a.cur?.let { (if (it.num > 0) "${it.num} \u00b7 " else "") + it.name + "   \u00b7   " } ?: ""   // which channel this recording is from
+        u.txt(c, "$chName${java.text.SimpleDateFormat("EEE dd.MM").format(cp.start)}  ${a.hm.format(cp.start)} \u2013 ${a.hm.format(cp.stop)}", tx, y + 96 * U, mw, 25f, u.SEC)
+        val bx = tx + 120 * U; val bww = mw - 240 * U; val by = y + 150 * U; val bh = 8 * U
+        u.rr(c, bx, by, bww, bh, bh / 2, 0x38FFFFFF); u.rr(c, bx, by, bww * buf / dur, bh, bh / 2, 0x59FFFFFF); u.rr(c, bx, by, bww * pos / dur, bh, bh / 2, -1)
+        pt.color = -1; c.drawCircle(bx + bww * pos / dur, by + bh / 2, 11 * U, pt)
+        u.txt(c, tm(pos), tx, by + bh / 2, 110 * U, 25f, -1, 600)
+        u.txt(c, tm(dur), tx + mw, by + bh / 2, 110 * U, 25f, u.SEC, 600, android.graphics.Paint.Align.RIGHT)
         if (target >= 0) {
             val now = a.pos(); val diff = Math.abs(target - now)
-            val lab = tm(target) + "  (" + (if (target >= now) "+" else "-") + tm(diff) + ")"
+            val lab = tm(target) + "  (" + (if (target >= now) "+" else "\u2212") + tm(diff) + ")"
             val hasTh = thumbUrl(0) != null
-            val tw = (if (hasTh) 240 else 200) * d; val th = if (hasTh) 135 * d else 0f
+            val tw = (if (hasTh) 480 else 400) * U; val th = if (hasTh) 270 * U else 0f
             val cx = (bx + bww * pos / dur).coerceIn(bx + tw / 2, bx + bww - tw / 2)
-            val ph = th + 40 * d; val py = y - 4 * d - ph
-            u.fill(c, cx - tw / 2 - 6 * d, py, tw + 12 * d, ph, u.ROW)
+            val ph = th + 76 * U; val py = y - 12 * U - ph
+            u.matRect(c, cx - tw / 2 - 12 * U, py, tw + 24 * U, ph, 18 * U)
             if (hasTh) {
                 val bmp = thumbs.get(slot(target)) ?: nearThumb(slot(target))
-                if (bmp != null) c.drawBitmap(bmp, null, RectF(cx - tw / 2, py + 6 * d, cx + tw / 2, py + 6 * d + th), pt)
+                if (bmp != null) c.drawBitmap(bmp, null, RectF(cx - tw / 2, py + 12 * U, cx + tw / 2, py + 12 * U + th), pt)
                 else {
-                    u.fill(c, cx - tw / 2, py + 6 * d, tw, th, 0xFF000000.toInt())
+                    u.rr(c, cx - tw / 2, py + 12 * U, tw, th, 10 * U, 0xFF000000.toInt())
                     val msg = if (slot(target) in thumbFail) "No preview" else "Loading preview..."
-                    u.txt(c, msg, cx, py + 6 * d + th / 2 + 5 * d, tw, 13f, u.GRAY, false, true)
+                    u.txt(c, msg, cx, py + 12 * U + th / 2, tw, 24f, u.SEC, 400, android.graphics.Paint.Align.CENTER)
                 }
             }
-            u.txt(c, lab, cx, py + ph - 12 * d, tw, 16f, -1, true, true)
+            u.txt(c, lab, cx, py + ph - 32 * U, tw, 29f, -1, 700, android.graphics.Paint.Align.CENTER)
         }
     }
 }

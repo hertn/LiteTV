@@ -2,7 +2,14 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "app.iptv"
     compileSdk = 34
-    defaultConfig { applicationId = "app.iptv"; minSdk = 21; targetSdk = 34; versionCode = 14; versionName = "1.4.7" }
+    defaultConfig { applicationId = "app.iptv"; minSdk = 21; targetSdk = 34; versionCode = 15; versionName = "2.0.0"; manifestPlaceholders["appLabel"] = "LiteTV" }
+    // "dev" = the Apple TV redesign test build: its own app id and name, so it installs next to the normal LiteTV
+    buildTypes {
+        create("dev") {
+            initWith(getByName("release")); applicationIdSuffix = ".dev"; versionNameSuffix = "-dev"
+            manifestPlaceholders["appLabel"] = "LiteTV Dev"; matchingFallbacks += listOf("release")
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_1_8; targetCompatibility = JavaVersion.VERSION_1_8 }
     kotlinOptions { jvmTarget = "1.8" }
 

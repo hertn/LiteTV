@@ -277,7 +277,7 @@ fun MainActivity.checkEpg(force: Boolean = false) {
         try {
             Thread.currentThread().priority = Thread.MIN_PRIORITY
             ensureEpg(old, true); epgChanged()
-            if (force) runOnUiThread { Toast.makeText(this, "EPG updated", Toast.LENGTH_SHORT).show() }
+            if (force) runOnUiThread { flash("EPG updated") }
         } catch (e: Exception) {} finally { epgBusy = false }
     }.start()
 }

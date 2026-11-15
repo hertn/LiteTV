@@ -59,39 +59,48 @@ fun MainActivity.qr(s: String, n: Int = 360): android.graphics.Bitmap {
 
 fun MainActivity.esc(s: String) = s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;")
 
-// the phone pages share the TV's look: #20152D panels, #990AE3 accent, purple buttons, lavender accents
-val logoSvg = """<svg class=logo viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="22" fill="#990AE3"/><path d="M28 28H39V61H72V72H28Z" fill="#fff"/><path d="M47 29L73 44L47 59Z" fill="#D9B8F0"/></svg>"""
-val iconLink = """<link rel=icon href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23990AE3'/%3E%3Cpath d='M28 28H39V61H72V72H28Z' fill='%23fff'/%3E%3Cpath d='M47 29L73 44L47 59Z' fill='%23D9B8F0'/%3E%3C/svg%3E">"""
-val css = """<style>
-body{font-family:sans-serif;background:#20152D;color:#fff;max-width:700px;margin:0 auto;padding:24px 14px}
-.hd{display:flex;align-items:center;margin-bottom:10px}
-.logo{width:48px;height:48px;margin-right:14px;flex:none}
-h2{margin:0;font-size:28px}
-h2 span{color:#D9B8F0}
-a{color:#D9B8F0;text-decoration:none}
+// the phone pages: iOS dark style, neutral like the TV menus (white for the main button); the only colour is the logo
+const val LOGO_INNER = """<defs><linearGradient id=lbg x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color='#3A3A3F'/><stop offset=1 stop-color='#141416'/></linearGradient><linearGradient id=ltr x1=0 y1=0 x2=1 y2=1><stop offset=0 stop-color='#D08CFF'/><stop offset=1 stop-color='#9B30F0'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(#lbg)'/><rect x='27' y='26' width='14' height='50' rx='7' fill='#fff'/><rect x='27' y='62' width='48' height='14' rx='7' fill='#fff'/><path d='M50 29 L72 42 L50 55 Z' fill='url(#ltr)' stroke='url(#ltr)' stroke-width='5' stroke-linejoin='round'/>"""
+val logoSvg = "<svg class=logo viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'>$LOGO_INNER</svg>"
+val iconLink = "<link rel=icon href=\"data:image/svg+xml," + java.net.URLEncoder.encode("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>$LOGO_INNER</svg>", "UTF-8").replace("+", "%20") + "\">"
+const val css = """<style>
+:root{--bg:#000;--card:#1C1C1E;--field:#2C2C2E;--sec:rgba(235,235,245,.6);--ter:rgba(235,235,245,.3);--fill:rgba(118,118,128,.24);--sep:rgba(84,84,88,.6)}
+body{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:#fff;max-width:700px;margin:0 auto;padding:28px 16px 48px;-webkit-font-smoothing:antialiased}
+.hd{display:flex;align-items:center;margin-bottom:14px}
+.logo{width:52px;height:52px;margin-right:14px;flex:none;border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+h2{margin:0;font-size:30px;font-weight:700;letter-spacing:-.02em}
+h2 span{color:var(--sec);font-weight:600}
+a{color:#fff;text-decoration:none;font-weight:600}
 p{line-height:1.4}
-.sub{color:#B8BECC}
-.msg{background:rgba(153,10,227,.3);color:#fff;padding:12px 14px;border-radius:10px;font-weight:bold}
-.card{background:rgba(0,0,0,.28);border-radius:10px;padding:14px;margin:14px 0}
-.card.drag{outline:2px solid #990AE3}
-.card button.r{margin-top:10px}
+.sub{color:var(--sec)}
+.seg{display:flex;background:var(--fill);border-radius:10px;padding:3px;margin:6px 0 18px}
+.seg a,.seg span{flex:1;text-align:center;padding:9px 6px;border-radius:8px;font-size:15px;font-weight:600;color:#fff}
+.seg span.on{background:#636366;box-shadow:0 3px 8px rgba(0,0,0,.25)}
+.msg{background:var(--card);color:#fff;padding:12px 16px;border-radius:12px;font-weight:600;box-shadow:inset 0 0 0 1px var(--sep)}
+.card{background:var(--card);border-radius:14px;padding:16px;margin:14px 0}
+.card.drag{outline:2px solid #fff}
+.card button.r{margin-top:10px;color:#FF453A}
 .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.hdl{font-size:28px;line-height:1;padding:6px 16px 6px 2px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;color:#D9B8F0}
-button.a{padding:6px 14px;margin-left:8px;font-size:15px}
-input:not([type=checkbox]):not([type=hidden]){width:100%;box-sizing:border-box;font-size:16px;margin:5px 0;padding:12px 14px;background:rgba(255,255,255,.08);color:#fff;border:2px solid transparent;border-radius:10px;outline:none}
-input:not([type=checkbox]):not([type=hidden]):focus{border-color:#990AE3}
-input::placeholder{color:#8A8A92}
-input[type=checkbox]{accent-color:#990AE3;width:18px;height:18px;vertical-align:middle;margin-right:8px}
-label{display:block;margin:8px 0}
-button{font-size:16px;font-weight:bold;padding:12px 22px;border:0;border-radius:10px;background:rgba(255,255,255,.14);color:#fff}
-button.p{background:#990AE3}
-.ov{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9}
-.btn{display:inline-block;font-size:16px;font-weight:bold;padding:12px 22px;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;margin:6px 0}
-.dlg{background:#20152D;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:24px;max-width:420px;width:100%}
-.dlg h3{margin:0 0 10px;font-size:22px}
+.hdl{font-size:26px;line-height:1;padding:6px 16px 6px 2px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;color:var(--ter)}
+button.a{padding:7px 14px;margin-left:8px;font-size:15px}
+input:not([type=checkbox]):not([type=hidden]){width:100%;box-sizing:border-box;font-size:17px;margin:5px 0;padding:12px 14px;background:var(--field);color:#fff;border:2px solid transparent;border-radius:10px;outline:none}
+input:not([type=checkbox]):not([type=hidden]):focus{border-color:rgba(255,255,255,.55)}
+input::placeholder{color:var(--ter)}
+input[type=checkbox]{accent-color:#fff;width:20px;height:20px;vertical-align:middle;margin-right:10px}
+label{display:block;margin:10px 0}
+button{font-size:17px;font-weight:600;padding:12px 22px;border:0;border-radius:12px;background:var(--fill);color:#fff;font-family:inherit}
+button.p{background:#fff;color:#000}
+.ov{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9;-webkit-backdrop-filter:blur(24px) saturate(1.6);backdrop-filter:blur(24px) saturate(1.6)}
+.btn{display:inline-block;font-size:17px;font-weight:600;padding:12px 22px;border-radius:12px;background:var(--fill);color:#fff;margin:6px 0}
+.dlg{background:rgba(44,44,46,.85);border-radius:16px;padding:24px;max-width:420px;width:100%}
+.dlg h3{margin:0 0 10px;font-size:20px;font-weight:600}
 .dlg .row{display:flex;justify-content:flex-end;margin-top:20px}
 .dlg .row button{margin-left:12px}
 </style>"""
+
+// the three phone pages as an iOS segmented control under the logo; the page you are on is the raised white segment
+fun tabs(cur: Int) = "<nav class=seg>" + listOf("/" to "Playlists", "/epg" to "Shared EPGs", "/favs" to "Favorites").mapIndexed { i, (u, n) ->
+    if (i == cur) "<span class=on>$n</span>" else "<a href=$u>$n</a>" }.joinToString("") + "</nav>"
 
 // confirmation popup in the app's style (used before a card is removed)
 val askJs = """<script>
@@ -107,7 +116,7 @@ ask('Remove '+(n||'this item')+'?','It is removed when you press Save.',function
 fun MainActivity.page(msg: String?): String {
     val json = JSONArray().apply { sources.forEach { sc -> put(JSONObject().put("i", sc.id).put("n", sc.name).put("m", sc.m3u).put("e", epgs.firstOrNull { e -> e.owner == sc.id }?.url ?: "")) } }.toString().replace("</", "<\\/")
     return """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><meta name=color-scheme content=dark><title>LiteTV playlists</title>$iconLink
-$css<body><div class=hd>$logoSvg<h2>Lite<span>TV</span> playlists</h2></div><a href=/epg>Shared EPGs &rarr;</a> &nbsp;&nbsp; <a href=/favs>Favorites order &rarr;</a>${if (msg != null) "<p class=msg>$msg</p>" else ""}
+$css<body><div class=hd>$logoSvg<h2>LiteTV</h2></div>${tabs(0)}${if (msg != null) "<p class=msg>$msg</p>" else ""}
 <form method=post><div id=rows></div>
 <button type=button onclick="add({})">+ Add playlist</button>
 <button class=p style='margin-left:12px'>Save</button></form>
@@ -142,7 +151,7 @@ fun MainActivity.epgPage(msg: String?): String {
     val src = JSONArray().apply { sources.forEach { put(JSONObject().put("i", it.id).put("n", it.name)) } }.toString().replace("</", "<\\/")
     val eg = JSONArray().apply { epgs.filter { it.owner.isEmpty() }.forEach { e -> put(JSONObject().put("i", e.id).put("n", e.name).put("u", e.url).put("all", e.all).put("a", JSONArray(e.srcIds))) } }.toString().replace("</", "<\\/")
     return """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><meta name=color-scheme content=dark><title>LiteTV shared EPGs</title>$iconLink
-$css<body><div class=hd>$logoSvg<h2>Lite<span>TV</span> shared EPGs</h2></div><a href=/>&larr; Playlists</a>${if (msg != null) "<p class=msg>$msg</p>" else ""}
+$css<body><div class=hd>$logoSvg<h2>LiteTV</h2></div>${tabs(1)}${if (msg != null) "<p class=msg>$msg</p>" else ""}
 <p class=sub>A shared EPG is added once and can be applied to all playlists or only some of them. An EPG that belongs to a single playlist is set on the playlists page. A playlist with no EPG at all uses the one in its M3U header, if it has one.</p>
 <form method=post><div id=rows></div>
 <button type=button onclick="add({})">+ Add shared EPG</button>
@@ -167,8 +176,8 @@ fun MainActivity.favsPage(): String {
     val note = if (favSort == 0) "Drag a group by the handle, or use Top / the arrows. The TV updates as soon as you let go. Top of this list = lowest channel numbers."
     else "The TV sorts favorites by ${FAV_SORTS[favSort]} right now. This order is saved, but it is only used when Favorites sort is Custom groups (TV: OK, Settings)."
     return """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><meta name=color-scheme content=dark><title>LiteTV favorites order</title>$iconLink
-$css<style>.nm{flex:1;font-weight:bold;font-size:18px}.cnt{color:#B8BECC;margin-right:12px;font-size:14px}.fix{opacity:.6}.card .top{margin-bottom:0}</style>
-<body><div class=hd>$logoSvg<h2>Lite<span>TV</span> favorites order</h2></div><a href=/>&larr; Playlists</a>
+$css<style>.nm{flex:1;font-weight:bold;font-size:18px}.cnt{color:var(--sec);margin-right:12px;font-size:14px}.fix{opacity:.6}.card .top{margin-bottom:0}</style>
+<body><div class=hd>$logoSvg<h2>LiteTV</h2></div>${tabs(2)}
 <p class=sub>$note</p><p id=ms class=msg style='display:none;position:sticky;top:8px;z-index:5'></p>
 <div id=rows></div>
 <script>
@@ -215,7 +224,7 @@ fun MainActivity.backupJson(): String {
         .put("favSort", prefs.getInt("favSort", 0)).put("favInner", prefs.getInt("favInner", 2))
         .put("favGroups", JSONArray(prefs.getString("favGroups", "[]")))
         .put("hidden", JSONArray((prefs.getStringSet("hidden", emptySet()) ?: emptySet()).sorted()))
-        .put("theme", prefs.getInt("theme", 0)).put("cA", prefs.getInt("cA", 12)).put("cP", prefs.getInt("cP", 12)).put("cH", prefs.getInt("cH", 12))
+        .put("theme2", prefs.getInt("theme2", 0)).put("blur", prefs.getBoolean("blur", defaultBlur()))
         .put("font", prefs.getInt("fontSize", 1)).put("season", prefs.getBoolean("season", true))
         .put("epgH", prefs.getInt("epgH", 12)).put("epgD", prefs.getInt("epgD", 7)).put("plD", prefs.getInt("plD", 7)).put("buf", prefs.getInt("buf", 0))
         .toString(2)
@@ -237,7 +246,8 @@ fun MainActivity.restoreBackup(txt: String): String? {
         // hidden channels and settings (older backup files do not have them: those settings stay as they are)
         val ed = prefs.edit()
         o.optJSONArray("hidden")?.let { ha -> val hs = HashSet<String>(); for (k in 0 until ha.length()) hs.add(ha.getString(k)); ed.putStringSet("hidden", hs) }
-        if (o.has("theme")) ed.putInt("theme", o.optInt("theme", 0).coerceIn(0, THEMES.size)).putInt("cA", o.optInt("cA", 12).coerceIn(0, SW - 1)).putInt("cP", o.optInt("cP", 12).coerceIn(0, SW - 1)).putInt("cH", o.optInt("cH", 12).coerceIn(0, SW - 1))
+        if (o.has("theme2")) ed.putInt("theme2", o.optInt("theme2", 0).coerceIn(0, THEMES.lastIndex))   // older backups have the old theme list: ignored
+        if (o.has("blur")) ed.putBoolean("blur", o.optBoolean("blur", defaultBlur()))
         if (o.has("font")) ed.putInt("fontSize", o.optInt("font", 1).coerceIn(0, FONT_NAMES.lastIndex))
         if (o.has("season")) ed.putBoolean("season", o.optBoolean("season", true))
         if (o.has("epgH")) ed.putInt("epgH", o.optInt("epgH", 12))

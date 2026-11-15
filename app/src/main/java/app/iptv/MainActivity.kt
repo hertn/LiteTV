@@ -53,12 +53,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 const val PORT = 8765
-const val UI_ALPHA = 0.98f   // 1.0 = solid; lower = more see-through
+const val UI_ALPHA = 0.98f   // with the blur off: 1.0 = solid; lower = more see-through
 const val REVERSED = true   // Telia style: higher channel numbers above, UP = higher. Set false for normal order.
 const val ROW_SCALE = 0.95f // 1.0 = original layout; lower = rows slightly shorter, so the options bar, info box and chips sit higher (everything stays aligned)
 
 class MainActivity : Activity() {
-    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var ui: Ui; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
+    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var ui: Ui; lateinit var blurLayer: BlurLayer; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
     lateinit var player: ExoPlayer; lateinit var prefs: SharedPreferences
     lateinit var catchupBar: CatchupBar
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
@@ -112,7 +112,7 @@ class MainActivity : Activity() {
     fun hideLoading() { loadingShown = false; spin.visibility = View.GONE }
     // stream errors are shown in the middle of the screen
     val hideMsg = Runnable { msg.visibility = View.GONE }
-    fun flashMid(t: String, ms: Long) { msg.text = t; msg.visibility = View.VISIBLE; msg.removeCallbacks(hideMsg); msg.postDelayed(hideMsg, ms) }
+    fun flashMid(t: String, ms: Long) { msg.text = t; msg.visibility = View.VISIBLE; msg.bringToFront(); msg.removeCallbacks(hideMsg); msg.postDelayed(hideMsg, ms) }
     fun clearMid() { msg.removeCallbacks(hideMsg); msg.visibility = View.GONE }
     // sleep timer: closes the app after the chosen time; a warning shows 1 minute before and any button cancels it
     var sleepMin = 0; var sleepWarned = false
@@ -123,8 +123,8 @@ class MainActivity : Activity() {
         if (m > 0) { pv.postDelayed(sleepWarn, m * 60_000L - 60_000L); pv.postDelayed(sleepRun, m * 60_000L); flash("Sleep timer: $m min", 2000) }
         else flash("Sleep timer off", 2000)
     }
-    var themeIdx = 0   // saved theme: 0 until THEMES.size - 1 = premade, THEMES.size = Custom
-    var cA = 12; var cP = 12; var cH = 12   // custom theme: swatch index of accent / panels / highlight
+    var themeIdx = 0   // saved theme, index into THEMES (the redesign uses a new key: the old theme list no longer exists)
+    var blurOn = false   // Settings > Blur behind menus
     val chCache = java.util.concurrent.ConcurrentHashMap<String, List<Ch>>()                              // source id -> channels
     val epgAt = java.util.concurrent.ConcurrentHashMap<String, Long>()                                    // epg url -> age of the downloaded file that is in the database
     val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
@@ -169,37 +169,40 @@ class MainActivity : Activity() {
     }
 
     // ---- themes ----
-    fun themeOf(i: Int): Theme = if (i < THEMES.size) THEMES[i] else customTheme(cA, cP, cH)
-    fun themeNames(): List<String> = THEMES.map { it.name } + "Custom"
+    fun themeNames(): List<String> = THEMES.map { it.name }
 
     fun loadTheme() {
-        themeIdx = prefs.getInt("theme", 0).coerceIn(0, THEMES.size)
-        cA = prefs.getInt("cA", 12).coerceIn(0, SW - 1); cP = prefs.getInt("cP", 12).coerceIn(0, SW - 1); cH = prefs.getInt("cH", 12).coerceIn(0, SW - 1)
-        T = themeOf(themeIdx)
+        themeIdx = prefs.getInt("theme2", 0).coerceIn(0, THEMES.lastIndex)
+        T = THEMES[themeIdx]
+        blurOn = prefs.getBoolean("blur", defaultBlur())
     }
 
     fun refreshTheme() {
-        root.setBackgroundColor(C_BG); osd.setBackgroundColor(C_BG)
-        ui.menuShader = null; ui.invalidate(); banner.invalidate()
+        root.setBackgroundColor(0xFF000000.toInt()); osd.background = dBg(withAlpha(T.panel, 0xF0), 0, 40f); msg.background = dBg(withAlpha(T.panel, 0xF0), 0, 24f)
+        ui.invalidate(); banner.invalidate()
     }
 
     // save = false: only a preview (undone with setTheme(themeIdx, false)); save = true: remember it
     fun setTheme(i: Int, save: Boolean) {
-        T = themeOf(i)
-        if (save) { themeIdx = i; prefs.edit().putInt("theme", i).apply() }
+        T = THEMES[i.coerceIn(0, THEMES.lastIndex)]
+        if (save) { themeIdx = i; prefs.edit().putInt("theme2", i).apply() }
         refreshTheme()
     }
 
-    fun setCustom(a: Int, p: Int, h: Int) {
-        cA = a; cP = p; cH = h
-        prefs.edit().putInt("cA", a).putInt("cP", p).putInt("cH", h).apply()
-        T = customTheme(cA, cP, cH)
-        refreshTheme()
+    // blur starts off on TVs with 1 GB of memory or less, and where the video frame cannot be copied (Android 6 and older)
+    fun defaultBlur(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 24) return false
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mi = android.app.ActivityManager.MemoryInfo(); am.getMemoryInfo(mi)
+        return !am.isLowRamDevice && mi.totalMem > 1_300_000_000L
     }
+    fun setBlur(on: Boolean) { blurOn = on && android.os.Build.VERSION.SDK_INT >= 24; prefs.edit().putBoolean("blur", blurOn).apply(); ui.blur.reset(); applyAlpha(); ui.invalidate() }
+    // with the blur on, the menus must be fully opaque: the blur already shows the video, and any leak shows it a second time, sharp
+    fun applyAlpha() { val al = if (blurOn) 1f else UI_ALPHA; ui.alpha = al; banner.alpha = al; catchupBar.alpha = al }
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
-        prefs = getSharedPreferences("p", 0)
+        prefs = getSharedPreferences("p", 0); keys = RemoteKeys(prefs)
         prefs.getString("updTag", null)?.let { t ->   // an update found before the restart, unless it is installed by now
             if (isNewer(t, packageManager.getPackageInfo(packageName, 0).versionName ?: "0")) { updTag = t; updUrl = prefs.getString("updUrl", "") ?: ""; updState = 3 } }
         loadTheme()
@@ -209,22 +212,24 @@ class MainActivity : Activity() {
         seasonOn = prefs.getBoolean("season", true)
         favs.addAll(prefs.getStringSet("favs", emptySet())!!); hidden.addAll(prefs.getStringSet("hidden", emptySet())!!)
         loadFavPrefs(); fontIdx = prefs.getInt("fontSize", 1).coerceIn(0, FONT_NAMES.lastIndex)
-        root = FrameLayout(this); root.setBackgroundColor(C_BG)
+        root = FrameLayout(this); root.setBackgroundColor(0xFF000000.toInt())
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
-        osd = TextView(this).apply { setTextColor(-1); textSize = 20f; setPadding(40, 20, 40, 20); setBackgroundColor(C_BG); visibility = View.GONE }
-        root.addView(osd, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        osd = TextView(this).apply { setTextColor(-1); textSize = 20f; gravity = Gravity.CENTER; setPadding(px(40f).toInt(), px(22f).toInt(), px(40f).toInt(), px(22f).toInt()); visibility = View.GONE
+            maxWidth = (resources.displayMetrics.widthPixels * 0.7).toInt() }
+        root.addView(osd, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(64f).toInt() })
         msg = TextView(this).apply {   // stream errors: in the middle of the screen
-            setTextColor(-1); textSize = 22f; gravity = Gravity.CENTER; setPadding(48, 28, 48, 28); setBackgroundColor(C_BG)
+            setTextColor(-1); textSize = 22f; gravity = Gravity.CENTER; setPadding(px(56f).toInt(), px(36f).toInt(), px(56f).toInt(), px(36f).toInt())
             maxWidth = (resources.displayMetrics.widthPixels * 0.7).toInt(); visibility = View.GONE
         }
         root.addView(msg, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         spin = ProgressBar(this).apply { isIndeterminate = true; indeterminateTintList = android.content.res.ColorStateList.valueOf(-1); visibility = View.GONE }   // buffering circle, no text
         val spinSize = (72 * resources.displayMetrics.density).toInt()
         root.addView(spin, FrameLayout.LayoutParams(spinSize, spinSize, Gravity.CENTER))
+        blurLayer = BlurLayer(this, this); root.addView(blurLayer, FrameLayout.LayoutParams(-1, -1))
         banner = Banner(this, this).apply { visibility = View.GONE }; root.addView(banner, FrameLayout.LayoutParams(-1, -1))
         catchupBar = CatchupBar(this, this).apply { visibility = View.GONE }; root.addView(catchupBar, FrameLayout.LayoutParams(-1, -1))
-        ui = Ui(this, this).apply { visibility = View.GONE }; root.addView(ui, FrameLayout.LayoutParams(-1, -1))
-        setContentView(root)
+        ui = Ui(this, this).apply { visibility = View.GONE }; root.addView(ui, FrameLayout.LayoutParams(-1, -1)); applyAlpha()
+        setContentView(root); refreshTheme()
         player = makePlayer(); pv.player = player
         sources = readSrcs(); epgs = readEpgs()
         if (sources.isEmpty()) settings() else activate(prefs.getInt("act", 0), false, true)
@@ -313,6 +318,7 @@ class MainActivity : Activity() {
 
 
 
+    val remRun: Runnable = object : Runnable { override fun run() { checkReminders(); pv.postDelayed(this, 20_000L) } }
     val epgTick: Runnable = object : Runnable { override fun run() { checkPlaylists(); checkEpg(); pv.postDelayed(this, 3600_000L) } }
 
     // leaving Settings: a changed guide length re-reads the files already on disk (no download)
@@ -340,7 +346,7 @@ class MainActivity : Activity() {
                 preloadChannels()
                 ensureEpg(urls, refresh || (ready && !fresh)); epgChanged()
                 preloadOthers(refresh)
-            } catch (e: Exception) { logErr("Playlist load failed: " + (e.message ?: e.javaClass.simpleName)); runOnUiThread { Toast.makeText(this, "Load failed: ${e.message}", Toast.LENGTH_LONG).show() } }
+            } catch (e: Exception) { logErr("Playlist load failed: " + (e.message ?: e.javaClass.simpleName)); runOnUiThread { flash("Load failed: ${e.message}", 5000) } }
         }.start()
     }
 
@@ -474,22 +480,26 @@ class MainActivity : Activity() {
     fun todayIdx(): Int = days().indexOf(dayStart()).coerceAtLeast(0)
     fun dayProgs(ch: Ch, day: Long): List<Prog> = progsOf(ch).filter { it.stop > day && it.start < day + 86400000L }
 
-    // options bar next to a channel / program. ids: 0 Watch, 1 TV guide, 2 Program info, 3 Channel settings, 4 favorite, 5 hide
-    // the TV guide button is only in the channel list (LEFT); inside the guide itself it is not shown
+    // options bar next to a channel / program. ids: 0 Watch, 1 TV guide, 2 Program info, 3 Channel settings, 4 favorite, 5 hide,
+    // 6 watch from start, 7 watch catch-up, 8 remind me. Watch is always first; the TV guide button is only in the channel list
     fun optIds(guide: Boolean, c: Ch? = null, p: Prog? = null): List<Int> {
         if (!guide) return listOf(0, 1, 2, 3, 4, 5)
+        val now = System.currentTimeMillis()
+        if (p != null && p.start > now) return listOf(0, 2, 8, 3, 4, 5)
         if (c != null && p != null && canCatchup(c, p))
-            return if (p.stop <= System.currentTimeMillis()) listOf(7, 0, 2, 3, 4, 5) else listOf(0, 6, 2, 3, 4, 5)
+            return if (p.stop <= now) listOf(7, 0, 2, 3, 4, 5) else listOf(0, 6, 2, 3, 4, 5)
         return listOf(0, 2, 3, 4, 5)
     }
     fun nOpts(guide: Boolean, c: Ch? = null, p: Prog? = null) = optIds(guide, c, p).size
+    // label to icon name
     fun chOptions(c: Ch, guide: Boolean, p: Prog? = null) = optIds(guide, c, p).map { id ->
         when (id) {
-            0 -> if (guide && p != null && p.stop <= System.currentTimeMillis() && canCatchup(c, p)) "Watch live" else "Watch"
-            1 -> "TV guide"; 2 -> "Program info"; 3 -> "Channel settings"
-            4 -> if (c.url in favs) "Remove from favorites" else "Add to favorites"
-            6 -> "Watch from start"; 7 -> "Watch catch-up"
-            else -> if (c.url in hidden) "Unhide channel" else "Hide channel"
+            0 -> (if (guide && p != null && p.stop <= System.currentTimeMillis() && canCatchup(c, p)) "Watch Live" else "Watch") to "play"
+            1 -> "TV Guide" to "guide"; 2 -> "Program Info" to "info"; 3 -> "Channel Settings" to "sliders"
+            4 -> (if (c.url in favs) "Remove from Favorites" else "Add to Favorites") to "star"
+            6 -> "Watch from Start" to "back15"; 7 -> "Watch Catch-up" to "back15"
+            8 -> (if (p != null && hasRem(c, p)) "Remove Reminder" else "Remind Me") to "bell"
+            else -> (if (c.url in hidden) "Unhide Channel" else "Hide Channel") to "hide"
         }
     }
 
@@ -505,6 +515,7 @@ class MainActivity : Activity() {
             4 -> { toggleFav(c.url); selectGroup(grp, true) }
             5 -> { toggle(hidden, "hidden", c.url); selectGroup(grp, true) }
             6, 7 -> if (p != null) { ui.close(); playCatchup(c, p); switchTo(c) }
+            8 -> if (p != null) toggleRem(c, p)
         }
         ui.invalidate()
     }
@@ -569,41 +580,45 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---- dialogs in the app's own style (dark panel, accent colour; the system keyboard still appears for typing) ----
-    fun dBg(color: Int, stroke: Int = 0): GradientDrawable {
-        val dp = resources.displayMetrics.density
-        return GradientDrawable().apply { setColor(color); cornerRadius = 10 * dp; if (stroke != 0) setStroke((3 * dp).toInt(), stroke) }
-    }
+    // ---- dialogs in the Apple TV style: rounded menu-coloured panel, faint buttons, the focused one turns white and grows ----
+    fun px(v: Float) = v * resources.displayMetrics.widthPixels / 1920f   // 1920-px design units, like Ui
+    fun dBg(color: Int, stroke: Int = 0, r: Float = 14f): GradientDrawable =
+        GradientDrawable().apply { setColor(color); cornerRadius = px(r); if (stroke != 0) setStroke(px(2f).toInt(), stroke) }
 
-    fun dEdit(h: String): EditText {
-        val dp = resources.displayMetrics.density
-        return EditText(this).apply {
-            hint = h; setHintTextColor(0xFF8A8A92.toInt()); setTextColor(-1); textSize = 20f; setSingleLine()
-            background = dBg(C_FIELD, 0x44FFFFFF); setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
-            setOnFocusChangeListener { v, f -> v.background = dBg(C_FIELD, if (f) C_PUR else 0x44FFFFFF) }
+    fun dEdit(h: String): EditText = EditText(this).apply {
+        hint = h; textSize = 20f; setSingleLine(); setPadding(px(28f).toInt(), px(20f).toInt(), px(28f).toInt(), px(20f).toInt())
+        fun look(f: Boolean) {   // focused field is white with dark text, like tvOS
+            background = dBg(if (f) -1 else 0x1FFFFFFF); setTextColor(if (f) 0xFF1C1C1E.toInt() else -1)
+            setHintTextColor(if (f) 0x8C1C1C1E.toInt() else 0x85FFFFFF.toInt())
         }
+        look(false); setOnFocusChangeListener { _, f -> look(f) }
     }
 
+    var panelBox: View? = null   // the open popup, so the blur can redraw it
     fun showPanel(title: String, views: List<View>, buttons: List<DBtn>, keyboard: Boolean = false, widthFrac: Double = 0.5): android.app.Dialog {
-        val dp = resources.displayMetrics.density
         val dlg = android.app.Dialog(this); dlg.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; clipChildren = false }
         buttons.forEachIndexed { i, b ->
             val t = TextView(this).apply {
-                text = b.label; setTextColor(-1); textSize = 18f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-                setPadding((28 * dp).toInt(), (12 * dp).toInt(), (28 * dp).toInt(), (12 * dp).toInt())
-                background = dBg(b.color, if (b.color == C_FIELD) 0x44FFFFFF else 0); isFocusable = true; isClickable = true
-                setOnFocusChangeListener { v, f -> v.background = dBg(b.color, if (f) 0xFFFFFFFF.toInt() else if (b.color == C_FIELD) 0x44FFFFFF else 0) }
+                text = b.label; textSize = 18f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
+                setPadding(px(44f).toInt(), px(20f).toInt(), px(44f).toInt(), px(20f).toInt()); isFocusable = true; isClickable = true
+                fun look(f: Boolean) {
+                    background = dBg(if (f) -1 else 0x24FFFFFF); setTextColor(if (f) 0xFF1C1C1E.toInt() else -1)
+                    animate().scaleX(if (f) 1.08f else 1f).scaleY(if (f) 1.08f else 1f).setDuration(120).start()
+                    elevation = if (f) px(12f) else 0f
+                }
+                look(false); setOnFocusChangeListener { _, f -> look(f) }
                 setOnClickListener { b.act(dlg) }
             }
-            row.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = (12 * dp).toInt() })
+            row.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = px(20f).toInt() })
         }
         val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; background = dBg(C_ROW)
-            setPadding((32 * dp).toInt(), (28 * dp).toInt(), (32 * dp).toInt(), (24 * dp).toInt())
+            orientation = LinearLayout.VERTICAL; background = MatBg(this@MainActivity, this, 28f)
+            clipChildren = false; clipToPadding = false
+            setPadding(px(56f).toInt(), px(48f).toInt(), px(56f).toInt(), px(44f).toInt())
             addView(TextView(this@MainActivity).apply { text = title; setTextColor(-1); textSize = 24f; typeface = Typeface.DEFAULT_BOLD })
-            for (v in views) addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (18 * dp).toInt() })
-            addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (22 * dp).toInt() })
+            for (v in views) addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(28f).toInt() })
+            addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(40f).toInt() })
         }
         dlg.setContentView(box)
         dlg.window?.apply {
@@ -611,7 +626,7 @@ class MainActivity : Activity() {
             setLayout((resources.displayMetrics.widthPixels * widthFrac).toInt(), -2)
             if (keyboard) setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
         }
-        dlg.show()
+        panelBox = box; dlg.show(); ui.blur.start()   // the blur keeps refreshing while the popup is open
         return dlg
     }
 
@@ -625,17 +640,17 @@ class MainActivity : Activity() {
     }
 
     // main menu (OK button); the number is the icon id
-    fun menuItems() = listOf(0 to "Search", 9 to "Playlists", 2 to "TV guide", 3 to "On air now", 4 to (if (showHidden) "Hide hidden" else "Show hidden"),
-        6 to "Last channel", 11 to (if (updState == 3 || updState == 5) "Settings  \u25CF Update" else "Settings"))
+    fun menuItems() = listOf("search" to "Search", "phone" to "Playlists", "guide" to "TV Guide", "eye" to (if (showHidden) "Hide Hidden" else "Show Hidden"),
+        "last" to "Last Channel", "remote" to "Remote Buttons", "gear" to (if (updState == 3 || updState == 5) "Settings  \u25CF Update" else "Settings"))
 
     fun menuAct(i: Int) {
         when (i) {
             0 -> { ui.close(); searchBox() }
             1 -> { ui.close(); settings() }
             2 -> ui.open(2)
-            3 -> ui.open(1)
-            4 -> { showHidden = !showHidden; selectGroup(grp, true) }
-            5 -> { ui.close(); prev?.let { play(it) } }
+            3 -> { showHidden = !showHidden; selectGroup(grp, true) }   // "On Air Now" was removed: LEFT already opens that list
+            4 -> { ui.close(); prev?.let { play(it) } }
+            5 -> ui.openKeys()
             6 -> ui.openSettings()
         }
     }
@@ -731,14 +746,14 @@ class MainActivity : Activity() {
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
                 // first time only: Android wants you to allow this app to install apps
-                Toast.makeText(this, "Allow LiteTV to install apps, then go back and press OK again", Toast.LENGTH_LONG).show()
+                flash("Allow LiteTV to install apps, then go back and press OK again", 5000)
                 startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
                 return
             }
             val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
             startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                 .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) { Toast.makeText(this, "Could not open the installer: ${e.message}", Toast.LENGTH_LONG).show() }
+        } catch (e: Exception) { flash("Could not open the installer: ${e.message}", 5000) }
     }
 
     fun now(c: Ch): Prog? { val t = System.currentTimeMillis(); return progsOf(c).firstOrNull { t >= it.start && t < it.stop } }
@@ -765,7 +780,7 @@ class MainActivity : Activity() {
         val us = avdMs(c) * 1000L; player.createMessage { _, _ -> avdUs = us }.send()
         if (cp == null) {
             prefs.edit().putString("last", c.url).apply()
-            if (ui.mode == 0) banner.show(c)   // no banner while the lists are open
+            if (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0)) ui.openSubPlayer(true)   // channel settings overlay, not while the lists are open
         }
     }
 
@@ -818,7 +833,8 @@ class MainActivity : Activity() {
         }
     }
 
-    fun flash(t: String, ms: Long = 2500) { osd.text = t; osd.visibility = View.VISIBLE; osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms) }
+    fun flash(t: String, ms: Long = 2500) { osd.text = t; osd.visibility = View.VISIBLE; osd.bringToFront()   // above the menus, e.g. while changing subtitles
+        osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms) }
 
     fun zap(d: Int) {
         val l = if (shown.isNotEmpty()) shown else channels; if (l.isEmpty()) return
@@ -842,18 +858,18 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL
             if (url != null) {
                 addView(label("Manage from your phone", 20f, -1, true))
-                addView(label("Scan the code, or open this address in a browser on the same network", 16f, 0xFFB8BECC.toInt(), top = 6))
-                addView(label(url, 18f, C_PUR, true, 12))
+                addView(label("Scan the code, or open this address in a browser on the same network", 16f, 0xA3FFFFFF.toInt(), top = 6))
+                addView(label(url, 18f, -1, true, 12))
             } else addView(label("No network", 20f, -1, true))
-            addView(View(this@MainActivity).apply { setBackgroundColor(0x33FFFFFF); layoutParams = LinearLayout.LayoutParams(-1, (1 * dp).toInt()).apply { topMargin = (22 * dp).toInt() } })
+            addView(View(this@MainActivity).apply { setBackgroundColor(0x24FFFFFF); layoutParams = LinearLayout.LayoutParams(-1, (1 * dp).toInt()).apply { topMargin = (22 * dp).toInt() } })
             addView(label("Reload", 18f, -1, true, 20))
-            addView(label("Downloads the playlists, guides and channel logos again from scratch. If a download fails, the previous copy is kept.", 16f, 0xFF8A90A0.toInt(), top = 6))
+            addView(label("Downloads the playlists, guides and channel logos again from scratch. If a download fails, the previous copy is kept.", 16f, 0xA3FFFFFF.toInt(), top = 6))
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             addView(info, LinearLayout.LayoutParams(0, -2, 1f))
             if (url != null) addView(ImageView(this@MainActivity).apply {
-                setImageBitmap(qr(url, 300)); background = dBg(0xFFFFFFFF.toInt())
+                setImageBitmap(qr(url, 300)); background = dBg(-1, 0, 20f); setPadding(px(14f).toInt(), px(14f).toInt(), px(14f).toInt(), px(14f).toInt())
             }, LinearLayout.LayoutParams((220 * dp).toInt(), (220 * dp).toInt()).apply { leftMargin = (32 * dp).toInt() })
         }
         val views = listOf<View>(body)
@@ -883,9 +899,22 @@ class MainActivity : Activity() {
     val numRun = Runnable { val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { play(it) } }
 
     // BACK is handled here (before any view sees it): a short press goes back, holding it exits the app completely
-    var backLong = false
+    var backLong = false; var okHold = false; var okLong = false
     override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
         if (sleepWarned && ev.action == KeyEvent.ACTION_DOWN) { setSleep(0); return true }
+        // while watching (or on the overlay after a channel change) holding OK opens the main menu, so remotes without a Menu
+        // button can get there; a short press does OK's own job when it is let go
+        val okKey = ev.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || ev.keyCode == KeyEvent.KEYCODE_ENTER
+        if (okKey && (okHold || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
+            if (ev.action == KeyEvent.ACTION_DOWN) {
+                if (ev.repeatCount == 0) { okHold = true; okLong = false }
+                else if (okHold && !okLong && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true; ui.openMenu() }
+            } else if (ev.action == KeyEvent.ACTION_UP) {
+                val short = okHold && !okLong; okHold = false; okLong = false
+                if (short) onKeyDown(ev.keyCode, KeyEvent(KeyEvent.ACTION_DOWN, ev.keyCode))
+            }
+            return true
+        }
         if (ev.keyCode == KeyEvent.KEYCODE_BACK) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) backLong = false
@@ -907,6 +936,7 @@ class MainActivity : Activity() {
     }
 
     // closes the app for real and frees all of its memory
+    lateinit var keys: RemoteKeys
     fun exitApp() { exiting = true; finishAndRemoveTask() }
 
     override fun onKeyDown(k: Int, e: KeyEvent): Boolean {
@@ -923,22 +953,21 @@ class MainActivity : Activity() {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { player.playWhenReady = !player.playWhenReady; catchupBar.show(); return true }
             }
         }
-        val dir = if (REVERSED) 1 else -1
+        when (keys.actFor(k)?.id) {   // the viewer's button choices (Remote Buttons)
+            "menu" -> { ui.openMenu(); return true }
+            "settings" -> { if (cur != null) ui.openSubPlayer(false); return true }
+            "chUp" -> { zap(1); return true }
+            "chDown" -> { zap(-1); return true }
+            "list" -> { ui.open(1); return true }
+            "guide" -> { ui.open(2); return true }
+            "last" -> { prev?.let { play(it) }; return true }
+            "pause" -> { player.playWhenReady = !player.playWhenReady; return true }
+            "fwd" -> { skip(30000L); return true }
+            "rew" -> { skip(-30000L); return true }
+        }
         when (k) {
-            KeyEvent.KEYCODE_DPAD_UP -> zap(dir)
-            KeyEvent.KEYCODE_DPAD_DOWN -> zap(-dir)
-            KeyEvent.KEYCODE_CHANNEL_UP -> zap(1)
-            KeyEvent.KEYCODE_CHANNEL_DOWN -> zap(-1)
-            KeyEvent.KEYCODE_DPAD_LEFT -> ui.open(1)
-            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_PROG_BLUE -> ui.open(2)
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MENU -> ui.openMenu()
-            KeyEvent.KEYCODE_INFO -> cur?.let { banner.show(it) }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> player.playWhenReady = !player.playWhenReady
             KeyEvent.KEYCODE_MEDIA_PLAY -> player.playWhenReady = true
             KeyEvent.KEYCODE_MEDIA_PAUSE -> player.playWhenReady = false
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> skip(30000L)
-            KeyEvent.KEYCODE_MEDIA_REWIND -> skip(-30000L)
-            KeyEvent.KEYCODE_LAST_CHANNEL -> prev?.let { play(it) }
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
                 val d = k - KeyEvent.KEYCODE_0
                 if (d == 0 && numBuf.isEmpty()) prev?.let { play(it) }
@@ -950,10 +979,11 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() { super.onStop(); if (catchupProg == null) player.stop() else player.pause();   // live: let go of the hardware decoders while in the background; catch-up keeps its position
-        stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick) }
+        stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick); pv.removeCallbacks(remRun) }
     override fun onStart() {
         super.onStart(); if (cur != null) { if (player.playbackState == Player.STATE_IDLE) { player.prepare(); player.playWhenReady = true } else player.play() }
         pv.removeCallbacks(updTick); pv.postDelayed(updTick, 30_000L)
+        pv.removeCallbacks(remRun); pv.postDelayed(remRun, 5_000L)
         pv.removeCallbacks(epgTick); pv.postDelayed(epgTick, 60_000L)   // coming back from Home: refresh the guide a minute later if it is older than the refresh setting
     }
     // pressing Home: give back the memory that is only a cache (logos, programmes read for the screen); they are re-read when needed

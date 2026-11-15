@@ -116,7 +116,7 @@ fun MainActivity.fetch(urls: List<String>, pre: String, refresh: Boolean, maxAge
     }.forEach { it.join() }
     val what = if (pre == "l") "playlist" else "EPG"
     if (pre == "e" && fails.get() > 0) epgFailed = true
-    if (fails.get() > 0) runOnUiThread { Toast.makeText(this, "${fails.get()} $what source(s) failed", Toast.LENGTH_LONG).show() }
+    if (fails.get() > 0) runOnUiThread { flash("${fails.get()} $what source(s) failed", 5000) }
     return files.filter { it.exists() }
 }
 
