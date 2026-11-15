@@ -47,20 +47,12 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
     <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info for Mr. Bean: LIVE badge, category, channel, time, minutes left, description, Watch Live and Guide buttons, and a Later on row"><br><b>Program info</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/categories.jpg" width="100%" alt="The categories panel beside the channel list: All and the playlist's own groups"><br><b>Categories</b></td>
     <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="The OK screen: the show on now with its progress and tiles for Program Info, TV Guide, audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller"><br><b>Channel settings</b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/menu.jpg" width="100%" alt="The main menu: Search, Playlists, TV Guide, Reminders, Hidden Channels and Settings, with the channel now playing at the bottom"><br><b>Main menu</b></td>
     <td width="50%" align="center" valign="top"><img src="docs/reminders.jpg" width="100%" alt="Reminders: a strip of the days that have reminders, and the chosen day's reminder with its time, channel logo and show"><br><b>Reminders</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/settings.jpg" width="100%" alt="Settings: Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Transparency, Buffering, Sleep Timer and Playlist Refresh, with an explanation under the selected row"><br><b>Settings</b></td>
     <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with a preview of where the colour shows"><br><b>Themes</b></td>
-  </tr>
-  <tr>
     <td width="50%" align="center" valign="top"><img src="docs/remote-buttons.jpg" width="100%" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one"><br><b>Remote buttons</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/channel-change.jpg" width="100%" alt="After changing channel: channel name, film title, minutes left, end time, a live progress bar, and the hint OK Settings, Hold OK Menu"><br><b>Changing channel</b></td>
   </tr>
 </table>
 

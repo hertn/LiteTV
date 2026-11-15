@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LiteTV: free, lightweight IPTV player for Android TV</title>
-<meta name="description" content="LiteTV is a free, lightweight IPTV app for Android TV. Play your own M3U playlists with a full TV guide (EPG), reminders, favorites, themes and phone setup by QR code.">
+<meta name="description" content="LiteTV is a free, lightweight IPTV app for Android TV. Play your own M3U playlists with a TV guide grid (EPG), repeating reminders, favorites, themes and phone setup by QR code.">
 <link rel="canonical" href="https://hertn.github.io/LiteTV/">
 <meta name="theme-color" content="#1a1420">
 <link rel="icon" type="image/png" href="icon.png">
@@ -84,9 +84,65 @@ ol.steps{padding-left:1.2em}
 ol.steps li{margin-bottom:10px}
 code{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:.9em}
 footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--text-3);font-size:.9rem;text-align:center}
+
+.hub{padding-top:16px}
+.hub a{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--fill);text-decoration:none;font-weight:600;font-size:.95rem;color:var(--text-2)}
+.hub a:hover{background:var(--fill-2);color:var(--text)}
+.hub a:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+header.hero{padding-top:40px}
+.feat{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.feat .card{display:flex;flex-direction:column;gap:6px}
+.ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--surface-2);color:var(--accent-2);margin-bottom:6px}
+.ic svg{width:22px;height:22px}
+
+
+/* screenshots: one big picture, arrows, and a strip of thumbnails under it */
+.gal.wrap{padding-top:40px}
+.gal>*{max-width:960px;margin-left:auto;margin-right:auto}
+section.wrap{padding-top:56px;padding-bottom:56px}   /* .wrap's side padding would otherwise cancel the section spacing */
+@media (max-width:600px){section.wrap{padding-top:40px;padding-bottom:40px}.gal.wrap{padding-top:28px}}
+.gal-stage{position:relative;height:0;padding-top:62.5%;background:#0c0b0e;border:1px solid rgba(255,255,255,.12);border-radius:14px;overflow:hidden}   /* a 16:10 frame (padding trick: older Safari has no aspect-ratio) */
+.gal-stage img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;display:block}   /* the whole picture always fits, never cropped */
+.gal-btn{flex:0 0 auto;width:44px;height:44px;border-radius:50%;border:0;background:rgba(120,120,128,.24);color:#fff;font-size:28px;line-height:1;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.gal-btn:hover{background:rgba(120,120,128,.4)}
+.gal-btn:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.gal-on{position:absolute;top:50%;transform:translateY(-50%);background:rgba(20,20,24,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}   /* arrows on the big picture */
+.gal-on:hover{background:rgba(40,40,46,.9)}
+.gal-on.gal-prev{left:12px}.gal-on.gal-next{right:12px}
+.gal-cap{margin:12px 0 0;color:rgba(235,235,245,.72);font-size:.95rem;text-align:center;min-height:1.5em}
+.gal-strip{display:flex;gap:10px;margin-top:14px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:thin}
+.gal-strip button:first-child{margin-left:auto}.gal-strip button:last-child{margin-right:auto}   /* centred, but scrolls from the start when it overflows */
+.gal-strip button{flex:0 0 auto;padding:0;border:2px solid transparent;border-radius:9px;background:none;cursor:pointer;opacity:.55;transition:opacity .15s,border-color .15s}
+.gal-strip button:hover{opacity:.85}
+.gal-strip button[aria-current="true"]{opacity:1;border-color:#fff}
+.gal-strip button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.gal-strip img{display:block;height:56px;width:auto;border-radius:7px}
+@media (max-width:700px){.gal-strip img{height:44px}.gal-cap{font-size:.88rem}}
+@media (prefers-reduced-motion:reduce){.gal-strip button{transition:none}}
+.gal-stage img{cursor:zoom-in}
+dialog.gal-lb{border:0;padding:0;margin:0;background:transparent;max-width:none;max-height:none;width:100%;height:100%;color:#fff}
+dialog.gal-lb::backdrop{background:rgba(6,6,8,.95)}
+.gal-lb-in{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 72px 76px}
+.gal-lb-in img{display:block;max-width:100%;max-height:calc(100vh - 176px);width:auto;height:auto;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.gal-lb-cap{margin:12px 0 0;color:rgba(235,235,245,.75);font-size:.95rem;text-align:center}
+.gal-lb .gal-btn{position:fixed;top:50%;transform:translateY(-50%);width:48px;height:48px;background:rgba(40,40,46,.88)}
+.gal-lb .gal-btn:hover{background:rgba(70,70,78,.95)}
+.gal-lb .gal-prev{left:12px}.gal-lb .gal-next{right:12px}
+.gal-lb .gal-close{top:14px;right:14px;transform:none}
+#lbImg{cursor:zoom-in;touch-action:none;transform-origin:center;transition:transform .15s;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+#lbImg.zoomed{cursor:grab}#lbImg.drag{transition:none}#lbImg.zoomed.drag{cursor:grabbing}
+.gal-zoom{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:rgba(40,40,46,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.gal-zoom button{width:40px;height:40px;border:0;border-radius:50%;background:none;color:#fff;font-size:22px;line-height:1;cursor:pointer}
+.gal-zoom button:hover{background:rgba(255,255,255,.14)}
+.gal-zoom button:focus-visible{outline:3px solid #fff;outline-offset:-3px}
+.gal-zoom #lbFit{width:auto;padding:0 14px;border-radius:999px;font-size:.9rem;font-weight:600}
+.gal-zoom span{min-width:52px;text-align:center;font-size:.9rem;font-variant-numeric:tabular-nums;color:rgba(235,235,245,.85)}
+@media (prefers-reduced-motion:reduce){#lbImg{transition:none}}
+@media (max-width:700px){.gal-lb-in{padding:60px 8px 80px}.gal-lb .gal-prev,.gal-lb .gal-next{top:auto;bottom:16px;transform:none}}
 </style>
 </head>
 <body>
+<nav class="hub wrap" aria-label="More by hertn"><a href="https://hertn.github.io/"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg> All projects by hertn</a></nav>
 <main>
   <header class="hero wrap">
     <img class="icon" src="icon.png" width="96" height="96" alt="LiteTV icon">
@@ -100,17 +156,52 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--text-3);
     <p class="note">Free and open source (MIT), no ads. LiteTV does not include any channels, playlists or guide data: you add your own.</p>
   </header>
 
-  <div class="wrap">
-      <figure class="shot"><img src="tv-guide.jpg" width="1920" height="1080" loading="lazy" alt="The TV Guide grid: the selected show on top, then channels down the side and their shows across a two-hour timeline, with a line at the current time and the played part of each live show shaded"><figcaption>TV Guide</figcaption></figure>
-      <figure class="shot"><img src="guide.jpg" width="1920" height="1080" loading="lazy" alt="The Quick Guide: date pills with Today in white, a column of channel logos, the shows on Comedy Central by time, and a card with the live show&#39;s description"><figcaption>Quick Guide</figcaption></figure>
-      <figure class="shot"><img src="program.jpg" width="1920" height="1080" loading="lazy" alt="Program info for Mr. Bean: LIVE badge, category, channel, time, minutes left, description, Watch Live and Guide buttons, and a Later on row"><figcaption>Program info</figcaption></figure>
-      <figure class="shot"><img src="channel-settings.jpg" width="1920" height="1080" loading="lazy" alt="The OK screen: the show on now with its progress and tiles for Program Info, TV Guide, audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller"><figcaption>Channel settings</figcaption></figure>
-      <figure class="shot"><img src="menu.jpg" width="1920" height="1080" loading="lazy" alt="The main menu: Search, Playlists, TV Guide, Reminders, Hidden Channels and Settings, with the channel now playing at the bottom"><figcaption>Main menu</figcaption></figure>
-      <figure class="shot"><img src="reminders.jpg" width="1920" height="1080" loading="lazy" alt="Reminders: a strip of the days that have reminders, and the chosen day&#39;s reminder with its time, channel logo and show"><figcaption>Reminders</figcaption></figure>
-      <figure class="shot"><img src="channel-change.jpg" width="1920" height="1080" loading="lazy" alt="After changing channel: channel name, film title, minutes left, end time, a live progress bar, and the hint OK Settings, Hold OK Menu"><figcaption>Changing channel</figcaption></figure>
-      <figure class="shot"><img src="remote-buttons.jpg" width="1920" height="1080" loading="lazy" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one"><figcaption>Remote buttons</figcaption></figure>
-      <figure class="shot"><img src="settings.jpg" width="1920" height="1080" loading="lazy" alt="Settings: Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Transparency, Buffering, Sleep Timer and Playlist Refresh, with an explanation under the selected row"><figcaption>Settings</figcaption></figure>
-      <figure class="shot"><img src="themes.jpg" width="1920" height="1080" loading="lazy" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with a preview of where the colour shows"><figcaption>Themes</figcaption></figure>
+  <section class="wrap gal" id="gal" aria-label="Screenshots">
+    <div class="gal-stage">
+      <img id="galImg" src="channels.jpg" alt="LiteTV&amp;amp;amp;amp;#x27;s channel list over a playing show: channel logos, the show on now with its time and progress, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel">
+      <button type="button" class="gal-btn gal-on gal-prev" id="galPrev" aria-label="Previous screenshot">‹</button>
+      <button type="button" class="gal-btn gal-on gal-next" id="galNext" aria-label="Next screenshot">›</button>
+    </div>
+    <p class="gal-cap" id="galCap">Channel list  ·  1 of 8</p>
+    <div class="gal-strip">
+        <button type="button" data-src="channels.jpg" data-cap="Channel list" aria-label="Show: Channel list" aria-current="true"><img src="channels.jpg" alt="LiteTV&amp;amp;amp;amp;#x27;s channel list over a playing show: channel logos, the show on now with its time and progress, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel" loading="lazy"></button>
+        <button type="button" data-src="tv-guide.jpg" data-cap="TV Guide" aria-label="Show: TV Guide"><img src="tv-guide.jpg" alt="The TV Guide grid: the selected show on top, then channels down the side and their shows across a two-hour timeline, with a line at the current time and the played part of each live show shaded" loading="lazy"></button>
+        <button type="button" data-src="guide.jpg" data-cap="Quick Guide" aria-label="Show: Quick Guide"><img src="guide.jpg" alt="The Quick Guide: date pills with Today in white, a column of channel logos, the shows on Comedy Central by time, and a card with the live show&amp;amp;amp;amp;amp;#39;s description" loading="lazy"></button>
+        <button type="button" data-src="program.jpg" data-cap="Program info" aria-label="Show: Program info"><img src="program.jpg" alt="Program info for Mr. Bean: LIVE badge, category, channel, time, minutes left, description, Watch Live and Guide buttons, and a Later on row" loading="lazy"></button>
+        <button type="button" data-src="channel-settings.jpg" data-cap="Channel settings" aria-label="Show: Channel settings"><img src="channel-settings.jpg" alt="The OK screen: the show on now with its progress and tiles for Program Info, TV Guide, audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller" loading="lazy"></button>
+        <button type="button" data-src="reminders.jpg" data-cap="Reminders" aria-label="Show: Reminders"><img src="reminders.jpg" alt="Reminders: a strip of the days that have reminders, and the chosen day&amp;amp;amp;amp;amp;#39;s reminder with its time, channel logo and show" loading="lazy"></button>
+        <button type="button" data-src="themes.jpg" data-cap="Themes" aria-label="Show: Themes"><img src="themes.jpg" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with a preview of where the colour shows" loading="lazy"></button>
+        <button type="button" data-src="remote-buttons.jpg" data-cap="Remote buttons" aria-label="Show: Remote buttons"><img src="remote-buttons.jpg" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one" loading="lazy"></button>
+    </div>
+    <dialog class="gal-lb" id="galLb" aria-label="Screenshot, full size">
+      <div class="gal-lb-in">
+        <img id="lbImg" src="" alt="" draggable="false">
+        <p class="gal-lb-cap" id="lbCap"></p>
+      </div>
+      <button type="button" class="gal-btn gal-prev" id="lbPrev" aria-label="Previous screenshot">‹</button>
+      <button type="button" class="gal-btn gal-next" id="lbNext" aria-label="Next screenshot">›</button>
+      <button type="button" class="gal-btn gal-close" id="lbClose" aria-label="Close">×</button>
+      <div class="gal-zoom" role="group" aria-label="Zoom">
+        <button type="button" id="lbOut" aria-label="Zoom out">−</button>
+        <span id="lbZoom" aria-live="polite">100%</span>
+        <button type="button" id="lbIn" aria-label="Zoom in">+</button>
+        <button type="button" id="lbFit" aria-label="Fit to screen">Fit</button>
+      </div>
+    </dialog>
+  </section>
+
+  <section class="wrap" aria-labelledby="features">
+    <h2 id="features">Features</h2>
+    <div class="feat">
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M15 9v11"/></svg></div><h3>TV Guide grid</h3><p>Every channel across a timeline, with a line at the current time and how far each live show is. Watch, set a reminder or play catch-up right from the grid.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/></svg></div><h3>Quick Guide</h3><p>One channel at a time, day by day, beside the picture. Flip through channels and see what is on later without leaving what you watch.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div><h3>Reminders that repeat</h3><p>Mark a show once and every airing at that time gets a reminder, until you remove it. LiteTV offers to switch when it starts.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></div><h3>Your M3U playlists</h3><p>One or more playlists with quick switching, search across all of them, favorites in groups and hidden channels. The list goes round at the end.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg></div><h3>Low memory use</h3><p>The guide is stored on disk, not in RAM, so even long guides run smoothly on cheap Android TV boxes and sticks.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div><h3>Set up from your phone</h3><p>Scan a QR code and add playlists and guides on your phone instead of typing with the remote. Backups work the same way.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></div><h3>Per-channel settings</h3><p>Audio track, subtitles, aspect ratio for shows with black bars, and audio delay to fix out-of-sync sound, plus clear stream error messages.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><h3>A calm, Apple TV-style look</h3><p>Dark glass menus over the picture, big clear text and smooth animations, in eight accent colours or a Christmas, Halloween or New Year theme.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="8" r="2"/><path d="M12 14h.01M12 17h.01"/></svg></div><h3>Works with any remote</h3><p>Hold OK for the menu on remotes without a Menu button, see what every button does, and add your own buttons.</p></div>
     </div>
   </section>
 
@@ -131,7 +222,74 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--text-3);
   </section>
 </main>
 <footer class="wrap">
-  Made by <a href="https://github.com/hertn">hertn</a> with Claude. LiteTV is not affiliated with any playlist or guide provider.
+  Made by <a href="https://github.com/hertn">hertn</a> with Claude. <a href="https://hertn.github.io/">More projects</a>. LiteTV is not affiliated with any playlist or guide provider.
 </footer>
+<script>
+(() => {   // the screenshot gallery: arrows, the arrow keys, a swipe or a thumbnail change the big picture
+  const g = document.getElementById('gal'); if (!g) return;
+  const lb = document.getElementById('galLb'), lbImg = document.getElementById('lbImg'), lbCap = document.getElementById('lbCap');
+  const big = document.getElementById('galImg'), cap = document.getElementById('galCap'), th = [...g.querySelectorAll('.gal-strip button')]; let i = 0, resetZoom = () => {};
+  const show = n => {
+    i = (n + th.length) % th.length; const t = th[i], im = t.querySelector('img');
+    big.src = t.dataset.src; big.alt = im.alt; cap.textContent = t.dataset.cap + '  ·  ' + (i + 1) + ' of ' + th.length;
+    lbImg.src = big.src; lbImg.alt = big.alt; lbCap.textContent = cap.textContent; resetZoom();
+    th.forEach((b, k) => b.setAttribute('aria-current', String(k === i))); t.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  th.forEach((b, k) => b.addEventListener('click', () => show(k)));
+  document.getElementById('galPrev').onclick = () => show(i - 1);
+  document.getElementById('galNext').onclick = () => show(i + 1);
+  // the big picture opens full size; the arrows, keys and swipes keep working there (Esc or a click outside closes)
+  if (lb.showModal) {
+    big.addEventListener('click', () => { lbImg.src = big.src; lbImg.alt = big.alt; lbCap.textContent = cap.textContent; lb.showModal(); });
+    document.getElementById('lbPrev').onclick = () => show(i - 1);
+    document.getElementById('lbNext').onclick = () => show(i + 1);
+    document.getElementById('lbClose').onclick = () => lb.close();
+    lb.addEventListener('click', e => { if (moved) { moved = false; return; } if (e.target === lb || e.target.classList.contains('gal-lb-in')) lb.close(); });
+    // zoom: − / + / Fit, the mouse wheel, a click (real size, again = fit), +/-/0 keys, pinch; drag moves a zoomed picture
+    let z = 1, tx = 0, ty = 0, moved = false, pinch = null; const ptr = new Map(), zl = document.getElementById('lbZoom');
+    const fit = () => lbImg.offsetWidth / (lbImg.naturalWidth || lbImg.offsetWidth || 1);   // fitted size / real size
+    const apply = () => {
+      const mx = Math.max(0, (lbImg.offsetWidth * z - innerWidth) / 2 + 24), my = Math.max(0, (lbImg.offsetHeight * z - innerHeight) / 2 + 24);
+      if (z <= 1) tx = ty = 0; else { tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty)); }
+      lbImg.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`; lbImg.classList.toggle('zoomed', z > 1);
+      zl.textContent = Math.round(z * fit() * 100) + '%';
+    };
+    const zoomAt = (z2, px = innerWidth / 2, py = innerHeight / 2) => {   // keep the point under the mouse/fingers still
+      z2 = Math.max(1, Math.min(Math.max(4, 3 / fit()), z2));
+      const r = lbImg.getBoundingClientRect(), cx = r.left + r.width / 2 - tx, cy = r.top + r.height / 2 - ty;
+      tx = px - cx - (z2 / z) * (px - cx - tx); ty = py - cy - (z2 / z) * (py - cy - ty); z = z2; apply();
+    };
+    resetZoom = () => { z = 1; tx = ty = 0; apply(); };
+    lbImg.addEventListener('load', apply);
+    document.getElementById('lbIn').onclick = () => zoomAt(z * 1.5);
+    document.getElementById('lbOut').onclick = () => zoomAt(z / 1.5);
+    document.getElementById('lbFit').onclick = () => resetZoom();
+    lb.addEventListener('wheel', e => { e.preventDefault(); zoomAt(z * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY); }, { passive: false });
+    lb.addEventListener('keydown', e => { if (e.key === '+' || e.key === '=') zoomAt(z * 1.5); else if (e.key === '-') zoomAt(z / 1.5); else if (e.key === '0') resetZoom(); });
+    lb.addEventListener('pointerdown', e => { if (e.target !== lbImg) moved = false; });
+    lbImg.addEventListener('pointerdown', e => {
+      lbImg.setPointerCapture(e.pointerId); ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; lbImg.classList.add('drag');
+      if (ptr.size === 2) { const [a, b] = [...ptr.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z }; }
+    });
+    lbImg.addEventListener('pointermove', e => {
+      const p = ptr.get(e.pointerId); if (!p) return; const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+      if (Math.abs(dx) + Math.abs(dy) > 1) moved = true;
+      if (pinch && ptr.size === 2) { const [a, b] = [...ptr.values()]; zoomAt(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2); }
+      else if (z > 1) { tx += dx; ty += dy; apply(); }
+    });
+    const up = e => { ptr.delete(e.pointerId); if (ptr.size < 2) pinch = null; if (!ptr.size) lbImg.classList.remove('drag'); };
+    lbImg.addEventListener('pointerup', up); lbImg.addEventListener('pointercancel', up);
+    lbImg.addEventListener('click', e => { if (moved) return; if (z > 1) resetZoom(); else zoomAt(Math.max(2, 1 / fit()), e.clientX, e.clientY); });
+    addEventListener('resize', () => { if (lb.open) apply(); });
+    let x1 = null, multi = false;   // a one-finger swipe flips, but only when not zoomed
+    lb.addEventListener('touchstart', e => { if (e.touches.length > 1) multi = true; else x1 = e.touches[0].clientX; }, { passive: true });
+    lb.addEventListener('touchend', e => { if (e.touches.length) return; const m = multi; multi = false; if (x1 === null || m || z > 1) { x1 = null; return; } const dx = e.changedTouches[0].clientX - x1; if (Math.abs(dx) > 40) show(i + (dx < 0 ? 1 : -1)); x1 = null; });
+  } else big.style.cursor = 'default';
+  g.addEventListener('keydown', e => { if (e.key === 'ArrowRight') { show(i + 1); e.preventDefault(); } if (e.key === 'ArrowLeft') { show(i - 1); e.preventDefault(); } });
+  let x0 = null; const st = g.querySelector('.gal-stage');
+  st.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  st.addEventListener('touchend', e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) show(i + (dx < 0 ? 1 : -1)); x0 = null; });
+})();
+</script>
 </body>
 </html>
