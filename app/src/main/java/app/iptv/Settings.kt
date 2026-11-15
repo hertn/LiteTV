@@ -46,7 +46,7 @@ import org.json.JSONObject
 // settings panel (Settings screen): rows, headings, descriptions and what each row does; the drawing is in Ui.drawSettings
 // settings panel rows: name to current value
 // rows: 0 Themes, 1 Font size, 2 Seasonal decorations, 3 Blur behind menus, 4 Transparency | 5 Buffer size, 6 Sleep timer | 7 Playlist refresh,
-//       8 Guide refresh, 9 Guide length, 10 Update EPG now | 11 Favorites sort, 12 Within groups, 13 Reorder groups | 14 App update, 15 Error log, 16 About
+//       8 Guide refresh, 9 Guide length, 10 Update EPG now | 11 Favorites sort, 12 Within groups, 13 Reorder groups | 14 Remote buttons | 15 App update, 16 Error log, 17 About
 fun MainActivity.settingsItems() = listOf(
     "Themes" to themeNames()[themeIdx.coerceIn(0, THEMES.lastIndex)],
     "Font Size" to FONT_NAMES[fontIdx],
@@ -62,15 +62,16 @@ fun MainActivity.settingsItems() = listOf(
     "Favorites Sort" to FAV_SORTS[favSort],
     "Within Groups" to FAV_INNER[favInner],
     "Reorder Groups" to "",
+    "Remote Buttons" to "",
     "App Update" to when (updState) { 1 -> "Checking..."; 2 -> "Up to date"; 3 -> "$updTag available"; 4 -> "Downloading $updPct%"; 5 -> "Ready to install"; 6 -> "Failed"; else -> "" },
     "Error Log" to (if (errLog.isEmpty()) "Empty" else "${errLog.size} entries"),
     "About" to "")
 
 // icon in the little square at the start of each row
-val SETTING_ICONS = listOf("palette", "text", "leaf", "blur", "layers", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "down", "bug", "info")
+val SETTING_ICONS = listOf("palette", "text", "leaf", "blur", "layers", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "remote", "down", "bug", "info")
 
 // a heading above these rows
-fun MainActivity.settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 5 -> "PLAYBACK"; 7 -> "PLAYLISTS & TV GUIDE"; 11 -> "FAVORITES"; 14 -> "APP"; else -> null }
+fun MainActivity.settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 5 -> "PLAYBACK"; 7 -> "PLAYLISTS & TV GUIDE"; 11 -> "FAVORITES"; 14 -> "REMOTE"; 15 -> "APP"; else -> null }
 
 // the explanation of the selected row (shown in the footer)
 fun MainActivity.settingDesc(i: Int): String = when (i) {
@@ -96,8 +97,9 @@ fun MainActivity.settingDesc(i: Int): String = when (i) {
     }
     12 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
     13 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
-    15 -> "Recent problems since the app started"
-    16 -> "Version, who made LiteTV, the source code and how to support it"
+    14 -> "Choose what the remote's buttons do while watching"
+    16 -> "Recent problems since the app started"
+    17 -> "Version, who made LiteTV, the source code and how to support it"
     else -> when (updState) {
         1 -> "Contacting GitHub..."
         2 -> "You have the latest version. OK checks again"
@@ -136,8 +138,9 @@ fun MainActivity.settingAct(i: Int, d: Int) {
         11 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
         12 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
         13 -> if (favSort == 0 && d > 0) ui.openFavGroups()
-        14 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
-        15 -> if (d > 0) ui.openLog()
-        16 -> if (d > 0) ui.openAbout()
+        14 -> if (d > 0) ui.openKeys()
+        15 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
+        16 -> if (d > 0) ui.openLog()
+        17 -> if (d > 0) ui.openAbout()
     }
 }

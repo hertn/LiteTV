@@ -8,14 +8,15 @@ import android.view.KeyEvent as K
 class KeyAct(val id: String, val name: String, val desc: String, val def: List<Int>, val fixed: String = "")
 
 val KEY_ACTS = listOf(
-    KeyAct("menu", "Open Main Menu", "Opens the main menu with Search, Playlists, Remote Buttons and Settings. Holding OK always works too, so a remote without a Menu button can still get here.",
+    KeyAct("menu", "Open Main Menu", "Opens the main menu with Search, Playlists, TV Guide, Reminders, Hidden Channels and Settings. Holding OK always works too, so a remote without a Menu button can still get here.",
         listOf(K.KEYCODE_MENU), "Hold OK"),
     KeyAct("settings", "Channel Settings", "Audio, subtitles, aspect ratio and audio delay for the channel you are watching.",
         listOf(K.KEYCODE_DPAD_CENTER, K.KEYCODE_ENTER, K.KEYCODE_INFO)),
     KeyAct("chUp", "Channel Up", "The next channel up the list.", listOf(if (REVERSED) K.KEYCODE_DPAD_UP else K.KEYCODE_DPAD_DOWN, K.KEYCODE_CHANNEL_UP)),
     KeyAct("chDown", "Channel Down", "The next channel down the list.", listOf(if (REVERSED) K.KEYCODE_DPAD_DOWN else K.KEYCODE_DPAD_UP, K.KEYCODE_CHANNEL_DOWN)),
     KeyAct("list", "Channel List", "Opens the channel list. Press it again inside the list for the categories and playlists.", listOf(K.KEYCODE_DPAD_LEFT)),
-    KeyAct("guide", "TV Guide", "Opens the TV guide with what is on now and later.", listOf(K.KEYCODE_DPAD_RIGHT, K.KEYCODE_GUIDE, K.KEYCODE_PROG_BLUE)),
+    KeyAct("guide", "TV Guide", "Opens the TV guide grid: what is on now and later on every channel in your list.", listOf(K.KEYCODE_GUIDE, K.KEYCODE_PROG_BLUE)),
+    KeyAct("quick", "Quick Guide", "Opens the quick guide: one channel at a time with its shows, a fast way to flip through channels.", listOf(K.KEYCODE_DPAD_RIGHT)),
     KeyAct("last", "Previous Channel", "Jumps back to the channel you watched before. Back does this too.", listOf(K.KEYCODE_LAST_CHANNEL), "Back"),
     KeyAct("pause", "Play / Pause", "Pauses the channel and plays it again.", listOf(K.KEYCODE_MEDIA_PLAY_PAUSE)),
     KeyAct("fwd", "Skip Forward 30 s", "Jumps 30 seconds ahead, when the channel allows it.", listOf(K.KEYCODE_MEDIA_FAST_FORWARD)),

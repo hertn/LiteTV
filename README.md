@@ -19,12 +19,13 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 
 - A clean, Apple TV-style look: dark glass menus over the picture (blurred on TVs that can do it), big clear text and white focus
 - Live channels from one or more M3U playlists, with quick switching between playlists
-- TV guide (EPG): what's on now with minutes left, a guide by day for every channel, and a full program info page with what's on later
-- Reminders: press "Remind Me" on an upcoming show and LiteTV offers to switch when it starts
+- TV guide (EPG): what's on now with minutes left, a TV Guide grid with every channel across a timeline, a Quick Guide by day for one channel at a time, and a full program info page with what's on later
+- Reminders that repeat: press "Remind Me" on a show once and every airing at that time gets one, until you remove it. LiteTV offers to switch when it starts, and the Reminders page lists what's coming
 - Guide stored on disk instead of RAM, so memory use stays low even with long guides
 - Guide refresh setting (manual, every 6, 12, 24 or 48 hours) and an "Update guide now" button
 - Guide length setting (2 to 14 days, limited by what your guide file contains)
-- Favorites, hide/unhide channels, and search across all playlists
+- Favorites, hidden channels (unhide them on the Hidden Channels page), and search across all playlists
+- The channel list goes round: past the last channel it starts again from the first, with a line marking where
 - Audio track, subtitles, aspect ratio (Fit, Zoom, Wider, Taller, for shows with black bars) and audio delay per channel (to fix out-of-sync sound)
 - Remote Buttons: see what every button does, add your own buttons, and hold OK for the menu on remotes without a Menu button
 - Channel logos and clear stream error messages (for example "Server returned HTTP 404 (stream not found)")
@@ -38,24 +39,28 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 
 <table>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/channels.jpg" width="100%" alt="The channel list over a playing film: channel logos, the show on now with its time and progress, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel"><br><b>Channel list</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/guide.jpg" width="100%" alt="The TV guide: days from Yesterday to Wednesday, a column of channel logos, the shows on Sky Cinema Comedy by time, and a card with the live film's description"><br><b>TV guide</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channels.jpg" width="100%" alt="The channel list over a playing show: channel logos, the show on now with its time and progress, a round-arrow line where the list starts over, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel"><br><b>Channel list</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/tv-guide.jpg" width="100%" alt="The TV Guide grid: the selected show on top, then channels down the side and their shows across a two-hour timeline, with a line at the current time and the played part of each live show shaded"><br><b>TV Guide</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info for 22 Jump Street: LIVE badge, category, channel, time, minutes left, description, Watch Live, Favorite and Guide buttons, and a Later on row"><br><b>Program info</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/categories.jpg" width="100%" alt="The categories panel beside the channel list: Favorites, All and the playlist's own groups"><br><b>Categories</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/guide.jpg" width="100%" alt="The Quick Guide: date pills with Today in white, a column of channel logos, the shows on Comedy Central by time, and a card with the live show's description"><br><b>Quick Guide</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info for Mr. Bean: LIVE badge, category, channel, time, minutes left, description, Watch Live and Guide buttons, and a Later on row"><br><b>Program info</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/channel-change.jpg" width="100%" alt="After changing channel: channel name, film title, minutes left, end time, a live progress bar, and the hint OK Settings, Hold OK Menu"><br><b>Changing channel</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="Channel settings: tiles for audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller"><br><b>Channel settings</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/categories.jpg" width="100%" alt="The categories panel beside the channel list: All and the playlist's own groups"><br><b>Categories</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="The OK screen: the show on now with its progress and tiles for Program Info, TV Guide, audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller"><br><b>Channel settings</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/menu.jpg" width="100%" alt="The main menu: Search, Playlists, TV Guide, Show Hidden, Last Channel, Remote Buttons and Settings, with the channel now playing at the bottom"><br><b>Main menu</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/remote-buttons.jpg" width="100%" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one"><br><b>Remote buttons</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/menu.jpg" width="100%" alt="The main menu: Search, Playlists, TV Guide, Reminders, Hidden Channels and Settings, with the channel now playing at the bottom"><br><b>Main menu</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/reminders.jpg" width="100%" alt="Reminders: a strip of the days that have reminders, and the chosen day's reminder with its time, channel logo and show"><br><b>Reminders</b></td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="top"><img src="docs/settings.jpg" width="100%" alt="Settings: Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Transparency, Buffering, Sleep Timer and Playlist Refresh, with an explanation under the selected row"><br><b>Settings</b></td>
     <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with a preview of where the colour shows"><br><b>Themes</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/remote-buttons.jpg" width="100%" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one"><br><b>Remote buttons</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/channel-change.jpg" width="100%" alt="After changing channel: channel name, film title, minutes left, end time, a live progress bar, and the hint OK Settings, Hold OK Menu"><br><b>Changing channel</b></td>
   </tr>
 </table>
 
@@ -86,21 +91,22 @@ You can also use **Add Playlist Here** on the TV to type a playlist in with the 
 | Button | What it does |
 | --- | --- |
 | Menu / Hold OK | Open the main menu (while watching) |
-| OK / Info | Channel settings: audio, subtitles, aspect ratio, audio delay |
+| OK / Info | What's on, with Program Info, TV Guide, audio, subtitles, aspect ratio and audio delay |
 | Left | Open the channel list |
-| Right / Guide / Blue | Open the TV guide |
+| Right | Open the Quick Guide |
+| Guide / Blue | Open the TV Guide grid |
 | Up / Down, CH+ / CH- | Change channel |
 | 0-9 | Type a channel number |
 | Back | Go to the last channel (or step back in menus) |
 | Hold Back | Exit the app completely |
 
-You can add your own buttons to any of these in **Remote Buttons** in the main menu.
+You can add your own buttons to any of these in **Remote Buttons**, in Settings.
 
 ## Main menu
 
-Search, Playlists, TV Guide, Show/Hide hidden channels, Last Channel, Remote Buttons and **Settings**.
+Search, Playlists, TV Guide, Reminders, Hidden Channels and **Settings**.
 
-**Settings** holds Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Transparency, Buffering (Fast Start or Steady), Sleep Timer, Playlist Refresh, Guide Refresh, Guide Length, Update EPG Now, favorites sorting, App Update, the Error Log and About.
+**Settings** holds Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Transparency, Buffering (Fast Start or Steady), Sleep Timer, Playlist Refresh, Guide Refresh, Guide Length, Update EPG Now, favorites sorting, Remote Buttons, App Update, the Error Log and About.
 
 ## Backup
 

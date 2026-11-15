@@ -1,5 +1,42 @@
 # Changelog
 
+## 2.2.0
+
+A TV Guide grid, a Reminders page, reminders that repeat, a channel list that goes round, and a smoother, animated look.
+
+**TV guide**
+
+- New **TV Guide** grid: every channel down the side and its shows across a two-hour timeline, with a line at the current time and the played part of each live show shaded. OK watches a live show, sets a reminder on a later one or plays catch-up on a past one; hold OK for Program Info. Open it from the main menu, the channel list's buttons, the OK screen or the Guide button.
+- The per-channel guide is now the **Quick Guide** (▶ by default). The chosen day is a white pill, and picking another day lands on the show at the same time of day instead of last night's late show. OK on a date goes to its shows.
+
+**Reminders**
+
+- Reminders repeat: set one on a show and every airing of it at that time on that channel gets one, until you remove it. Episode numbers like (1/8) are ignored, and reminders you already had carry over.
+- New **Reminders** page in the main menu: only the days that have reminders, each with its time, channel logo and show. OK opens Program Info.
+- In Program Info, the "Later on" shows can be selected and OK sets or removes a reminder.
+
+**Channel list and Quick Guide**
+
+- The list goes round: past the last channel it starts again from the first, with a thin line and a round arrow where it does, so there are no more empty rows at the ends. Holding ▲ or ▼ stops at the end; one more press goes round.
+- Three quick taps of ▲ or ▼ jump to the top or bottom.
+- Scrolling glides: the channels spring into place while the highlight stays still.
+- The TV Guide button is back in the channel list's buttons.
+
+**OK screen and menus**
+
+- OK while watching now shows Program Info and TV Guide tiles before Audio, Subtitles, Aspect and Delay, and hides itself after 5 seconds if nothing is pressed.
+- Watch in Program Info just closes it when that show is already on.
+- Main menu: Search, Playlists, TV Guide, Reminders, Hidden Channels and Settings. Last Channel is gone (Back does that) and Remote Buttons moved into Settings.
+- New **Hidden Channels** page: hidden channels as a grid of logos, OK unhides one.
+- Favorites is now the first row of the Playlists panel, with "All Favorites" and your playlist's groups as its categories.
+- Closing the Playlists pop-up goes back to the main menu.
+
+**Look and feel**
+
+- Screens fade into each other, panels slide in and notices pop up. All of it is off when the TV's animations are turned off.
+- The main menu rows shrink to fit.
+- The shading behind the top of the TV Guide fades out instead of ending in a hard line.
+
 ## 2.1.0
 
 A new About page, tidier pop-ups and notices, and aspect ratio settings that work on every channel.

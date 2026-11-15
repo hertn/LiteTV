@@ -23,6 +23,7 @@ val ICON_SRC: Map<String, List<Pair<String, Boolean>>> = mapOf(
     "remote" to listOf("M8.5 2.5h7a2 2 0 0 1 2 2v15a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-15a2 2 0 0 1 2 -2z" to false, "M9.6 8.5a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0z" to false, "M10 14.5h.01M14 14.5h.01M10 18h.01M14 18h.01" to false),
     "check" to listOf("M4.5 12.5l5 5L19.5 7" to false),
     "play" to listOf("M7 4.5v15l13-7.5z" to true),
+    "grid" to listOf("M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2z" to false, "M3 10h18" to false, "M9 4v16" to false),
     "info" to listOf("M2.5 12.0a9.5 9.5 0 1 0 19.0 0a9.5 9.5 0 1 0 -19.0 0z" to false, "M12 11v6" to false, "M10.9 7.6a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0 -2.2 0z" to true),
     "sliders" to listOf("M4 7h9M17 7h3M4 17h3M11 17h9" to false, "M12.8 7.0a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0 -4.4 0z" to false, "M6.8 17.0a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0 -4.4 0z" to false),
     "star" to listOf("M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" to false),

@@ -63,7 +63,8 @@ class MainActivity : Activity() {
     lateinit var catchupBar: CatchupBar
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
-    var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0; var showHidden = false
+    var favGrp: String? = null   // the favorite group shown in Favorites (lowercase key), null = all favorites
+    var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0
     val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false
     val favSeq = java.util.concurrent.CopyOnWriteArrayList<String>()          // favorite urls in the order they were added
     val favGroupOrder = java.util.concurrent.CopyOnWriteArrayList<String>()   // your order of the favorite groups (lower-case group names)
@@ -200,7 +201,10 @@ class MainActivity : Activity() {
     fun setBlur(on: Boolean) { blurOn = on && android.os.Build.VERSION.SDK_INT >= 24; prefs.edit().putBoolean("blur", blurOn).apply(); ui.blur.reset(); applyAlpha(); ui.invalidate() }
     // with the blur on, the menus must be fully opaque: the blur already shows the video, and any leak shows it a second time, sharp
     fun toggleSeeThru(on: Boolean) { seeThru = on; prefs.edit().putBoolean("seeThru", on).apply(); ui.blur.reset(); applyAlpha(); ui.invalidate(); banner.invalidate(); catchupBar.invalidate() }
-    fun applyAlpha() { val al = if (blurOn || !seeThru) 1f else UI_ALPHA; ui.alpha = al; banner.alpha = al; catchupBar.alpha = al }
+    fun uiAlpha() = if (blurOn || !seeThru) 1f else UI_ALPHA
+    fun applyAlpha() { val al = uiAlpha(); ui.alpha = al; banner.alpha = al; catchupBar.alpha = al }
+    // small cards (notices, the channel number) drop in: fade + 12 px slide, 240 ms
+    fun popIn(v: View) { v.animate().cancel(); if (!ui.animOn()) { v.alpha = 1f; v.translationY = 0f; return }; v.alpha = 0f; v.translationY = -px(12f); v.animate().alpha(1f).translationY(0f).setDuration(240).setInterpolator(ui.EASE).start() }
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -362,14 +366,14 @@ class MainActivity : Activity() {
     }
 
 
-    fun vis() = if (showHidden) channels else channels.filter { it.url !in hidden }
+    fun vis() = channels.filter { it.url !in hidden }
 
     // favorited channels from every playlist that is loaded (the active one is always included)
     fun favRaw(): List<Ch> {
         val out = ArrayList<Ch>(); val seen = HashSet<String>(); val activeId = sources.getOrNull(act)?.id
         for (s in sources.toList()) {
             val l = chCache[s.id] ?: (if (s.id == activeId) channels else emptyList())
-            for (c in l) if (c.url in favs && (showHidden || c.url !in hidden) && seen.add(c.url)) out.add(c)
+            for (c in l) if (c.url in favs && c.url !in hidden && seen.add(c.url)) out.add(c)
         }
         return out
     }
@@ -399,7 +403,7 @@ class MainActivity : Activity() {
             for (src in sources.toList()) {
                 val l = chCache[src.id] ?: try { loadPlaylist(src, false) } catch (e: Exception) { emptyList() }
                 for (c in l) {
-                    if (!showHidden && c.url in hidden) continue
+                    if (c.url in hidden) continue
                     if (c.name.contains(q, true)) { if (seen.add(c.url)) byName.add(c) }
                     else if (on.isNotEmpty() && keysOf(c).any { it in on } && seen.add(c.url)) byShow.add(c)
                 }
@@ -421,7 +425,7 @@ class MainActivity : Activity() {
         selectGroup(if (saved >= 0) saved else if (keepFav && grp == 0) 0 else 1)   // switching playlist because a favorite was played: stay in Favorites
         val last = if (boot) c.firstOrNull { it.url == prefs.getString("last", null) } else null
         if (last != null) play(last)
-        else if (ui.side) { ui.catSel = grp; ui.plSel = act; ui.invalidate() }   // playlist picked in the side panels: keep them open
+        else if (ui.side) { ui.catSel = ui.catActive(); ui.plSel = ui.plActive(); ui.invalidate() }   // playlist picked in the side panels: keep them open
         else if (boot || ui.mode != 0) ui.open(if (ui.mode == 2) 2 else 1)
     }
 
@@ -514,13 +518,17 @@ class MainActivity : Activity() {
         }
     }
 
+    // hidden channels found in the playlists loaded so far (current one first), by number
+    fun hiddenList(): List<Ch> = (channels.asSequence() + chCache.values.asSequence().flatten()).filter { it.url in hidden }.distinctBy { it.url }.sortedBy { it.num }.toList()
+    fun unhide(c: Ch) { toggle(hidden, "hidden", c.url); selectGroup(grp, true); flash("Unhidden: ${c.name}", 2000) }
+
     fun toggle(set: HashSet<String>, key: String, u: String) { if (!set.remove(u)) set.add(u); prefs.edit().putStringSet(key, HashSet(set)).apply() }
 
     fun chOption(c: Ch, i: Int, p: Prog? = null) {
         val guide = ui.mode == 2
         when (optIds(guide, c, p).getOrNull(i)) {
             0 -> { if (c == cur) { ui.close(); switchTo(c) } else play(c) }   // 1st Watch: change channel, UI stays; 2nd Watch: close UI
-            1 -> ui.openGuide(c)
+            1 -> if (guide) ui.openGuide(c) else ui.openGrid(c, 1)   // from the channel list: the grid guide, BACK returns to the list
             2 -> ui.openInfo(c, p ?: now(c))
             3 -> { if (c != cur) play(c); ui.openSub() }
             4 -> { toggleFav(c.url); selectGroup(grp, true) }
@@ -674,18 +682,16 @@ class MainActivity : Activity() {
     }
 
     // main menu (OK button); the number is the icon id
-    fun menuItems() = listOf("search" to "Search", "phone" to "Playlists", "guide" to "TV Guide", "eye" to (if (showHidden) "Hide Hidden" else "Show Hidden"),
-        "last" to "Last Channel", "remote" to "Remote Buttons", "gear" to (if (updState == 3 || updState == 5) "Settings  \u25CF Update" else "Settings"))
+    fun menuItems() = listOf("search" to "Search", "phone" to "Playlists", "grid" to "TV Guide", "bell" to "Reminders", "hide" to "Hidden Channels", "gear" to (if (updState == 3 || updState == 5) "Settings  \u25CF Update" else "Settings"))
 
     fun menuAct(i: Int) {
         when (i) {
             0 -> { ui.close(); searchBox() }
-            1 -> { ui.close(); settings() }
-            2 -> ui.open(2)
-            3 -> { showHidden = !showHidden; selectGroup(grp, true) }   // "On Air Now" was removed: LEFT already opens that list
-            4 -> { ui.close(); prev?.let { play(it) } }
-            5 -> ui.openKeys()
-            6 -> ui.openSettings()
+            1 -> settings()   // the pop-up sits over the menu; closing it goes back to the menu
+            2 -> (cur ?: shown.firstOrNull())?.let { ui.openGrid(it, 3) }   // the grid guide; RIGHT while watching opens the quick guide
+            3 -> ui.openReminders()
+            4 -> ui.openHidden()   // "Show Hidden" became this page
+            5 -> ui.openSettings()   // Last Channel left (Back does it); Remote Buttons moved into Settings
         }
     }
 
@@ -819,6 +825,7 @@ class MainActivity : Activity() {
     }
 
     // a programme can be rewatched when its channel has catch-up, it has started, and it is not older than the channel's catch-up days
+    fun dayOf0(): Long = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis   // start of today
     fun canCatchup(c: Ch, p: Prog): Boolean {
         if (catchupMode(c).isEmpty()) return false
         val now = System.currentTimeMillis()
@@ -877,7 +884,9 @@ class MainActivity : Activity() {
         val ic = when { t.startsWith("Reminder") -> "bell"; t.startsWith("Sleep") -> "moon"; t.startsWith("Aspect") -> "aspect"; t.startsWith("Audio delay") -> "delay"
             t.contains("EPG") || t.contains("source") || t.startsWith("Load failed") -> "refresh"; t.contains("version") -> "down"; else -> "info" }
         osd.setCompoundDrawables(IconDrawable(ic, -1).apply { setBounds(0, 0, px(30f).toInt(), px(30f).toInt()) }, null, null, null)
+        val wasOn = osd.visibility == View.VISIBLE
         numV.visibility = View.GONE; osd.visibility = View.VISIBLE; osd.bringToFront()   // above the menus, e.g. while changing subtitles
+        if (!wasOn) popIn(osd)
         osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms)
     }
 
@@ -913,7 +922,7 @@ class MainActivity : Activity() {
             DBtn("Add Playlist Here", C_PUR, "plus", "Type the address with the remote instead") { it.dismiss(); addSource() },
             DBtn("Reload", C_FIELD, "refresh", "Downloads the playlists, guides and logos again. If a download fails, the old copy is kept.") { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() },
             DBtn("Close", C_FIELD, "x") { it.dismiss() }), width = 680f)
-        d.setOnDismissListener { stopServer() }
+        d.setOnDismissListener { stopServer(); if (ui.mode == 3) { ui.touch(); ui.requestFocus() } }
         dlg = d
     }
 
@@ -941,10 +950,10 @@ class MainActivity : Activity() {
         // while watching (or on the overlay after a channel change) holding OK opens the main menu, so remotes without a Menu
         // button can get there; a short press does OK's own job when it is let go
         val okKey = ev.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || ev.keyCode == KeyEvent.KEYCODE_ENTER
-        if (okKey && (okHold || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
+        if (okKey && (okHold || ui.mode == 16 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) { okHold = true; okLong = false }
-                else if (okHold && !okLong && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true; ui.openMenu() }
+                else if (okHold && !okLong && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true; if (ui.mode == 16) ui.gridOk(true) else ui.openMenu() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
                 val short = okHold && !okLong; okHold = false; okLong = false
                 if (short) onKeyDown(ev.keyCode, KeyEvent(KeyEvent.ACTION_DOWN, ev.keyCode))
@@ -995,7 +1004,8 @@ class MainActivity : Activity() {
             "chUp" -> { zap(1); return true }
             "chDown" -> { zap(-1); return true }
             "list" -> { ui.open(1); return true }
-            "guide" -> { ui.open(2); return true }
+            "guide" -> { (cur ?: shown.firstOrNull())?.let { ui.openGrid(it, 0) }; return true }
+            "quick" -> { ui.open(2); return true }
             "last" -> { prev?.let { play(it) }; return true }
             "pause" -> { player.playWhenReady = !player.playWhenReady; return true }
             "fwd" -> { skip(30000L); return true }
@@ -1008,7 +1018,7 @@ class MainActivity : Activity() {
                 if (catchupProg != null) return true   // catch-up ignores the number keys, so a stray press can't leave it
                 val d = k - KeyEvent.KEYCODE_0
                 if (d == 0 && numBuf.isEmpty()) prev?.let { play(it) }
-                else { numBuf += d; numV.text = numBuf; osd.visibility = View.GONE; numV.visibility = View.VISIBLE; numV.bringToFront(); pv.removeCallbacks(numRun); pv.postDelayed(numRun, 1500) }
+                else { numBuf += d; numV.text = numBuf; osd.visibility = View.GONE; if (numV.visibility != View.VISIBLE) { numV.visibility = View.VISIBLE; popIn(numV) }; numV.bringToFront(); pv.removeCallbacks(numRun); pv.postDelayed(numRun, 1500) }
             }
             else -> return super.onKeyDown(k, e)
         }
