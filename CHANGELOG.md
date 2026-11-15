@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.1
+
+Small fixes to panels and the OK screen.
+
+- The last item in the Playlists and Categories panels is no longer cut off by the panel's bottom edge.
+- Favorite Groups and Error Log are now cards sized to what they hold, with their hints inside the card.
+- Back from Program Info or the TV Guide, opened from the OK screen while watching, now goes straight back to the picture.
+
 ## 2.2.0
 
 A TV Guide grid, a Reminders page, reminders that repeat, a channel list that goes round, and a smoother, animated look.

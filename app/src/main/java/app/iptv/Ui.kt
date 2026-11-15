@@ -921,7 +921,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (floating) glass(c, x, M, pw, h - 2 * M) else { matRect(c, x, 0f, pw, h, 0f); fill(c, x + pw - U, 0f, U, h, HAIR) }
         hdr(c, title, x + ins + 26 * U, if (floating) M + 52 * U else rh * 0.62f - 9 * U, pw - 60 * U)
         if (floating) beginScroll(c, x, M, pw, h - 2 * M)
-        val top = maxOf(0, minOf(selI - 3, items.size - rows))
+        val top = maxOf(0, minOf(selI - 3, items.size - (if (floating) rows - 1 else rows)))   // floating: the 10th row peeks under the card edge, so the list end scrolls one further to lift the last item above it
         for (k in 0 until rows) {
             val i = top + k; val lab = items.getOrNull(i) ?: break; val y = rh * (k + 1); val on = i == selI
             val bx = x + ins; val bw = pw - 2 * ins; val bh = rh - 12 * U
@@ -936,7 +936,6 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (floating) endScroll(c)
     }
 
-    // error log (mode 10): the last problems since the app started, newest first; UP / DOWN scroll, OK clears the log
     // ---------- TV guide grid (main menu, OK tiles, the Guide button): every channel of the current list, 2 hours across ----------
     // the window scrolls: ◀ ▶ go show by show and move the window when a show starts outside it; ▲ ▼ change channel.
     // OK: a show on now = watch it, a later show = reminder on/off, an earlier one = catch-up if the channel has it; hold OK = Program Info.
@@ -1132,25 +1131,43 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         keyHint(c, listOf("OK" to "Unhide"), ix, y0 + ch0 - 50 * U, iw)
     }
+    // a page card like Reminders / Hidden Channels: sized to its rows (scrolls when they do not fit), centred down the screen,
+    // notes and key hints inside the card at the bottom
+    fun drawListCard(c: Canvas, w: Float, h: Float, pw: Float, title: String, count: String, items: List<String>, selI: Int, grab: Boolean,
+                     empty: String, notes: List<String>, hints: List<Pair<String, String>>) {
+        val x = M; val ix = x + 40 * U; val iw = pw - 80 * U; val rh = 80 * U; val top = 112 * U
+        val bottom = notes.size * 40 * U + (if (items.isEmpty()) 0f else 100 * U) + (if (notes.isEmpty()) 0f else 20 * U)
+        val fit = maxOf(1, ((h - 2 * M - top - bottom) / rh).toInt()); val nr = minOf(fit, maxOf(1, items.size))
+        val ch0 = top + (if (items.isEmpty()) 110 * U else nr * rh) + bottom; val y0 = ((h - ch0) / 2).coerceAtLeast(M)
+        glass(c, x, y0, pw, ch0)
+        txt(c, title, ix, y0 + 62 * U, iw, 44f, WHITE, 700)
+        txt(c, count, ix + iw, y0 + 66 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
+        if (items.isEmpty()) txt(c, empty, ix, y0 + top + 30 * U, iw, 32f, SEC, 600)
+        val sel0 = selI.coerceIn(0, maxOf(0, items.lastIndex)); val first = maxOf(0, sel0 - fit + 1)
+        for (j in first until minOf(items.size, first + fit)) {
+            val y = y0 + top + (j - first) * rh; val on = j == sel0; val bx = x + 14 * U; val bw = pw - 28 * U; val bh = rh - 12 * U
+            lift(c, on, bx, y, bw, bh, 1.025f) {
+                if (on) rr(c, bx, y, bw, bh, 14 * U, WHITE)
+                stxt(c, (if (grab && on) "●  " else "") + items[j], ix, y + bh / 2, iw, 31f, if (on) ONF else WHITE, if (on) 600 else 500, on)
+            }
+        }
+        var ny = y0 + top + (if (items.isEmpty()) 110 * U else nr * rh) + 20 * U
+        for (n in notes) { txt(c, n, ix, ny, iw, 24f, SEC); ny += 40 * U }
+        if (items.isNotEmpty()) keyHint(c, hints, ix, y0 + ch0 - 50 * U, iw)
+    }
+    // error log (mode 10): the last problems since the app started, newest first; UP / DOWN scroll, OK clears the log
     fun drawErrLog(c: Canvas, w: Float, h: Float) {
-        val pw = w * 0.62f; val items = a.errLog.toList()
-        drawPanel(c, M, pw, h, "Error Log", items, logSel.coerceIn(0, maxOf(0, items.lastIndex)), -1, true, null, true)
-        if (items.isEmpty()) txt(c, "No problems since the app started", M + 40 * U, h / 2, pw - 80 * U, 29f, SEC)
-        if (items.isNotEmpty()) keyHint(c, listOf("UP / DOWN" to "scroll", "OK" to "clear the log"), M + 40 * U, h - M - 40 * U, pw - 80 * U)   // Back needs no hint: it goes back everywhere
+        val items = a.errLog.toList()
+        drawListCard(c, w, h, w * 0.62f, "Error Log", if (items.isEmpty()) "" else "${items.size} entries", items, logSel, false,
+            "No problems since the app started", emptyList(), listOf("UP / DOWN" to "scroll", "OK" to "clear the log"))   // Back needs no hint: it goes back everywhere
     }
 
     // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
     fun drawFavGroups(c: Canvas, w: Float, h: Float) {
-        val names = a.favGroupNames().map { it.second }; val pw = w * 0.34f
-        drawPanel(c, M, pw, h, "Favorite Groups", names, grpSel.coerceIn(0, maxOf(0, names.lastIndex)), -1, true, grpGrab, true)
-        if (names.isEmpty()) { txt(c, "No favorites yet", M + 40 * U, h / 2, pw - 80 * U, 29f, SEC); return }
-        val x = M + pw + 40 * U; val tw0 = w - x - 80 * U; var y = h * 0.3f
-        fun line(k: String, v: String) { keyHint(c, listOf(k to v), x, y, tw0); y += 50 * U }
-        if (grpGrab) { line("UP / DOWN", "move the group"); line("OK or BACK", "drop it here") }
-        else { line("UP / DOWN", "choose a group"); line("OK", "grab it to move") }
-        y += 20 * U
-        txt(c, if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", x, y, tw0, 24f, SEC); y += 40 * U
-        txt(c, "\"Other\" always stays last", x, y, tw0, 24f, SEC)
+        val names = a.favGroupNames().map { it.second }
+        drawListCard(c, w, h, 680 * U, "Favorite Groups", if (names.isEmpty()) "" else "${names.size} groups", names, grpSel, grpGrab, "No favorites yet",
+            if (names.isEmpty()) emptyList() else listOf(if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", "\"Other\" always stays last"),
+            if (grpGrab) listOf("UP / DOWN" to "move", "OK" to "drop it here") else listOf("UP / DOWN" to "choose", "OK" to "grab to move"))
     }
 
     // ---------- themes: a colour list (and the seasonal themes) with a preview of where the colour shows ----------
@@ -1282,7 +1299,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 side -> side = false
                 mode == 4 -> { if (subOpen) subOpen = false else if (backMode == 0) close() else mode = backMode }
-                mode == 5 -> { mode = infoBack; if (mode == 14) remSel = remSel.coerceAtLeast(0) }
+                mode == 5 -> if (infoBack == 4) close() else { mode = infoBack; if (mode == 14) remSel = remSel.coerceAtLeast(0) }   // from the OK tiles: back to the picture, not the tiles
                 mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 8 }   // back to settings, preview dropped
                 mode == 8 -> { a.settingsDone(); mode = 3 }
                 mode == 9 -> { if (grpGrab) grpGrab = false else mode = 8 }   // drop the group, then back to settings
@@ -1355,7 +1372,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 rt -> if (quickHide && backMode == 0) open(2) else if (!subOpen) { subI = minOf(3, subI + 1) } else if (subI == 3) oj = minOf(n - 1, oj + a.AVD_JUMP)
                 ok -> if (quickHide) quickHide = false   // after a channel change the first OK only picks the tiles up
                 else if (subI == -2) { a.subCh()?.let { openInfo(it, a.now(it)) } }
-                else if (subI == -1) { a.subCh()?.let { openGrid(it, 4) } }
+                else if (subI == -1) { a.subCh()?.let { openGrid(it, 0) } }   // BACK closes it: the tiles do not come back
                 else if (subOpen) { a.subApply(subI, oj); subOpen = false } else {
                     val o = a.subOpts(subI)
                     if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true }   // one option: the tile is dimmed and says so
