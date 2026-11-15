@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.1
+
+Bug fixes, mostly for slower TVs like the Chromecast with Google TV HD.
+
+- Streams no longer stop for a few seconds every now and then. The player used to wait until its buffer was almost empty before loading more, so any slow moment on the network ran it dry. It now keeps loading all the time.
+- Buffer Size is now **Buffering**, with two choices: Fast Start (default) or Steady (for weak Wi-Fi).
+- New **Transparency** setting under Appearance. Turn it off for solid menus, which are lighter on slow TVs.
+- The blur behind menus uses far less of the TV's processor and looks the same.
+- A guide or playlist download that fails (for example right after the TV wakes up, before Wi-Fi is ready) is tried again up to 3 times.
+- "Reading EPG 1 of 3" now counts every EPG you have set up, not just the current playlist's.
+- In Themes, the New Year row no longer covers the OK and BACK hints.
+
 ## 2.0.0
 
 A whole new look, made to feel like an Apple TV app, plus reminders and remote button settings.

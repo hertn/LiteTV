@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "app.iptv"
     compileSdk = 34
-    defaultConfig { applicationId = "app.iptv"; minSdk = 21; targetSdk = 34; versionCode = 15; versionName = "2.0.0"; manifestPlaceholders["appLabel"] = "LiteTV" }
+    defaultConfig { applicationId = "app.iptv"; minSdk = 21; targetSdk = 34; versionCode = 16; versionName = "2.0.1"; manifestPlaceholders["appLabel"] = "LiteTV" }
     // "dev" = the Apple TV redesign test build: its own app id and name, so it installs next to the normal LiteTV
     buildTypes {
         create("dev") {

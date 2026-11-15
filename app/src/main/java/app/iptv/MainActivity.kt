@@ -102,7 +102,7 @@ class MainActivity : Activity() {
     }
     fun hostOf(u: String): String = try { URL(u).host } catch (e: Exception) { "?" }   // only the host is logged: playlist urls can contain a password
     // buffer size: how much of a channel is loaded ahead (bigger = fewer stutters, slower channel start); changing it builds a new player when you leave Settings
-    val BUF_NAMES = arrayOf("Small", "Normal", "Large")
+    val BUF_NAMES = arrayOf("Fast Start", "Steady")
     var bufIdx = 0; var bufDirty = false
     var plDays = 7   // playlists are downloaded again when their file is older than this many days (0 = only by hand)
     val retryRun = Runnable { if (cur != null) player.prepare() }
@@ -125,6 +125,7 @@ class MainActivity : Activity() {
     }
     var themeIdx = 0   // saved theme, index into THEMES (the redesign uses a new key: the old theme list no longer exists)
     var blurOn = false   // Settings > Blur behind menus
+    var seeThru = true   // Settings > Transparency (off = solid menus, no blur)
     val chCache = java.util.concurrent.ConcurrentHashMap<String, List<Ch>>()                              // source id -> channels
     val epgAt = java.util.concurrent.ConcurrentHashMap<String, Long>()                                    // epg url -> age of the downloaded file that is in the database
     val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
@@ -174,7 +175,7 @@ class MainActivity : Activity() {
     fun loadTheme() {
         themeIdx = prefs.getInt("theme2", 0).coerceIn(0, THEMES.lastIndex)
         T = THEMES[themeIdx]
-        blurOn = prefs.getBoolean("blur", defaultBlur())
+        blurOn = prefs.getBoolean("blur", defaultBlur()); seeThru = prefs.getBoolean("seeThru", true)
     }
 
     fun refreshTheme() {
@@ -198,7 +199,8 @@ class MainActivity : Activity() {
     }
     fun setBlur(on: Boolean) { blurOn = on && android.os.Build.VERSION.SDK_INT >= 24; prefs.edit().putBoolean("blur", blurOn).apply(); ui.blur.reset(); applyAlpha(); ui.invalidate() }
     // with the blur on, the menus must be fully opaque: the blur already shows the video, and any leak shows it a second time, sharp
-    fun applyAlpha() { val al = if (blurOn) 1f else UI_ALPHA; ui.alpha = al; banner.alpha = al; catchupBar.alpha = al }
+    fun toggleSeeThru(on: Boolean) { seeThru = on; prefs.edit().putBoolean("seeThru", on).apply(); ui.blur.reset(); applyAlpha(); ui.invalidate(); banner.invalidate(); catchupBar.invalidate() }
+    fun applyAlpha() { val al = if (blurOn || !seeThru) 1f else UI_ALPHA; ui.alpha = al; banner.alpha = al; catchupBar.alpha = al }
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -235,10 +237,11 @@ class MainActivity : Activity() {
         if (sources.isEmpty()) settings() else activate(prefs.getInt("act", 0), false, true)
     }
 
+    // min = max: keep downloading all the time. With min 4 s the player sat idle for ~20 s until only 4 s were left, then raced
+    // to refill, so any slow moment on the network ran the buffer dry (seen on a Chromecast HD); start-up time is unchanged
     fun loadControl(): DefaultLoadControl = when (bufIdx) {
-        1 -> DefaultLoadControl.Builder().setBufferDurationsMs(8000, 30000, 1500, 3000)
-        2 -> DefaultLoadControl.Builder().setBufferDurationsMs(15000, 60000, 2500, 5000)
-        else -> DefaultLoadControl.Builder().setBufferDurationsMs(4000, 20000, 800, 1500)
+        1 -> DefaultLoadControl.Builder().setBufferDurationsMs(30000, 30000, 1500, 3000)
+        else -> DefaultLoadControl.Builder().setBufferDurationsMs(20000, 20000, 800, 1500)
     }.build()
 
     // builds the player (the buffer size is chosen here)

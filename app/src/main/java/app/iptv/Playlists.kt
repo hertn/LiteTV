@@ -109,8 +109,10 @@ fun MainActivity.fetch(urls: List<String>, pre: String, refresh: Boolean, maxAge
         Thread {
             val f = files[i]
             if (refresh || !f.exists() || System.currentTimeMillis() - f.lastModified() > maxAge) {
-                try { val t = File(f.path + ".tmp"); open(urls[i]).use { s -> t.outputStream().use { s.copyTo(it) } }; t.renameTo(f) }
-                catch (e: Exception) { fails.incrementAndGet(); logErr((if (pre == "l") "Playlist" else "EPG") + " download failed (" + hostOf(urls[i]) + "): " + (e.message ?: e.javaClass.simpleName)) }
+                // 3 tries 10 s apart: right after the TV wakes Wi-Fi is often not ready yet and everything times out at once
+                var tries = 0
+                while (true) try { val t = File(f.path + ".tmp"); open(urls[i]).use { s -> t.outputStream().use { s.copyTo(it) } }; t.renameTo(f); break }
+                catch (e: Exception) { if (++tries < 3) { Thread.sleep(10000); continue }; fails.incrementAndGet(); logErr((if (pre == "l") "Playlist" else "EPG") + " download failed (" + hostOf(urls[i]) + "): " + (e.message ?: e.javaClass.simpleName)); break }
             }
         }.apply { start() }
     }.forEach { it.join() }

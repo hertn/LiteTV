@@ -211,11 +211,14 @@ fun MainActivity.ensureEpg(urls: List<String>, force: Boolean, download: Boolean
             epgNow = if (dl.size == 1) "Downloading EPG..." else "Downloading ${dl.size} EPG files..."; ui.postInvalidate()
             fetch(dl, "e", force, epgMaxAge())
         }
-        urls.forEachIndexed { idx, u ->
+        // numbered against every EPG in every playlist, so "3 of 8" matches what you set up (each playlist's call only sees its own)
+        val all = sources.toList().flatMap { epgUrls(it) }.distinct()
+        urls.forEach { u ->
             synchronized(lk("e" + u)) {
                 val f = File(filesDir, "e" + hx(u))
                 if (f.exists()) {
-                    epgNow = if (urls.size == 1) "Reading EPG..." else "Reading EPG ${idx + 1} of ${urls.size}..."; epgCnt = 0; ui.postInvalidate()
+                    val i = all.indexOf(u)
+                    epgNow = if (all.size <= 1 || i < 0) "Reading EPG..." else "Reading EPG ${i + 1} of ${all.size}..."; epgCnt = 0; ui.postInvalidate()
                     importEpg(u, f); epgAt[u] = f.lastModified()
                 }
             }

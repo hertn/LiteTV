@@ -125,7 +125,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     val mPath = Path(); var matOx = 0f   // how far the canvas is shifted right while drawing (lists move right when side panels open)
     fun mat(c: Canvas, path: Path, tint: Int = T.panel) {
         val b = blur.out
-        if (b != null && a.blurOn) {
+        if (!a.seeThru) p.color = withAlpha(tint, 0xFF)
+        else if (b != null && a.blurOn) {
             blur.cur?.add(path, matOx)   // the blur itself is painted by BlurLayer underneath
             p.color = withAlpha(tint, (T.alpha * 255).toInt())
         } else p.color = withAlpha(tint, 0xED)
@@ -648,7 +649,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 rr(c, 40 * U, y + ih / 2 - 24 * U, 48 * U, 48 * U, 12 * U, if (on) 0x14000000 else 0x1AFFFFFF)
                 icon(c, SETTING_ICONS.getOrElse(i) { "info" }, 64 * U, y + ih / 2, 28 * U, col)
                 txt(c, row.first, 110 * U, y + ih / 2, pw * 0.5f, 31f, col, if (on) 600 else 500)
-                val open = i == 0 || i == 12 || i == 14
+                val open = i == 0 || i == 13 || i == 15
                 if (row.second.isNotEmpty() || open) txt(c, row.second + (if (open) "  ›" else ""), pw - 40 * U, y + ih / 2, pw * 0.42f, 29f,
                     if (on) ONF else if (en) SEC else 0x55FFFFFF, if (on) 600 else 400, Paint.Align.RIGHT)
             }
@@ -794,7 +795,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 
     // ---------- themes: a colour list (and the seasonal themes) with a preview of where the colour shows ----------
     fun drawThemes(c: Canvas, w: Float, h: Float) {
-        val pw = w * 0.24f; val rh = 78 * U
+        val pw = w * 0.24f
+        // rows shrink a little when the list would run into the key hints (11 themes did: New Year's highlight covered them)
+        val rh = minOf(78 * U, (h - M - 36 * U - 30 * U - (M - 4 * U) - 2 * 58 * U) / THEMES.size)
         glass(c, 0f, M, pw, h - 2 * M)
         var y = M - 4 * U
         THEMES.forEachIndexed { i, t ->
@@ -1054,7 +1057,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     // PixelCopy works before it returns, so on the main thread it would hold up the remote); between copies the
     // picture fades from the previous blurred frame to the newest at the screen's refresh rate, so it moves smoothly.
     inner class Blur {
-        val bw = 384; val bh = 216   // copy size; stretched 5x to the screen, which the blur makes invisible
+        val bw = 192; val bh = 108   // copy size; stretched 10x to the screen, which the blur makes invisible (384x216 was 4x the work for the same look)
         val bg = android.os.HandlerThread("blur").apply { start() }; val bgH = Handler(bg.looper)
         val shapes = HashMap<View, BlurShapes>(); var cur: BlurShapes? = null
         var src: Bitmap? = null; @Volatile var out: Bitmap? = null; var prev: Bitmap? = null; var outAt = 0L; var period = 100f
@@ -1068,7 +1071,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         val h = Handler(Looper.getMainLooper())
         val loop = Runnable { grab() }
-        fun active() = a.blurOn && (visibility == View.VISIBLE || a.banner.visibility == View.VISIBLE || a.catchupBar.visibility == View.VISIBLE || a.panelBox?.isAttachedToWindow == true)
+        fun active() = a.blurOn && a.seeThru && (visibility == View.VISIBLE || a.banner.visibility == View.VISIBLE || a.catchupBar.visibility == View.VISIBLE || a.panelBox?.isAttachedToWindow == true)
         fun reset() { out = null; prev = null; h.removeCallbacks(loop); if (a.blurOn) start() }
         fun start() { if (a.blurOn && !busy) { h.removeCallbacks(loop); h.post(loop) } }
         fun shader(b: Bitmap, w: Float, ht: Float) = shaders.getOrPut(b) { android.graphics.BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
@@ -1102,7 +1105,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                         var o: Bitmap? = null
                         if (r == android.view.PixelCopy.SUCCESS) {
                             s.getPixels(px, 0, bw, 0, 0, bw, bh)
-                            for (k in 0..2) boxBlur(px, tmp, bw, bh, 12)   // 3 passes ~ Gaussian, sigma ~12.5 px of 384 = ~60 px at 1080p (option B)
+                            for (k in 0..2) boxBlur(px, tmp, bw, bh, 6)   // 3 passes ~ Gaussian, sigma ~6 px of 192 = ~60 px at 1080p (option B)
                             ring = (ring + 1) % 3; o = bufs[ring] ?: Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888).also { bufs[ring] = it }
                             o.setPixels(px, 0, bw, 0, 0, bw, bh)
                         }
@@ -1122,8 +1125,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 nF++; if (now - fAt > 3000L) { if (now - fAt < 4000L) android.util.Log.i("LiteTVBlur", "${nF * 1000 / (now - fAt)} blur frames/s"); nF = 0; fAt = now }
                 a.blurLayer.invalidate(); a.panelBox?.let { if (it.isAttachedToWindow) it.invalidate() }
             }
-            // at most ~20 copies a second; a failed copy (protected video, surface going away) waits half a second
-            if (active()) h.postDelayed(loop, if (o != null) 50L else 500L)
+            // at most ~5 copies a second (the crossfade hides the gaps; 20/s maxed out a Chromecast HD); a failed copy waits half a second
+            if (active()) h.postDelayed(loop, if (o != null) 200L else 500L)
         }
     }
 }
@@ -1159,7 +1162,8 @@ class MatBg(val a: MainActivity, val host: View, val r: Float) : android.graphic
         val k = a.px(1f); val rr = r * k; val bd = RectF(bounds)
         path.reset(); path.addRoundRect(bd, rr, rr, Path.Direction.CW)
         val b = a.ui.blur.out; p.style = Paint.Style.FILL
-        if (b != null && a.blurOn) {
+        if (!a.seeThru) p.color = withAlpha(T.panel, 0xFF)
+        else if (b != null && a.blurOn) {
             host.getLocationOnScreen(loc); val sw = a.resources.displayMetrics.widthPixels.toFloat(); val sh = a.resources.displayMetrics.heightPixels.toFloat()
             c.save(); c.clipPath(path); a.ui.blur.draw(c, RectF(-loc[0].toFloat(), -loc[1].toFloat(), sw - loc[0], sh - loc[1]), host); c.restore()
             p.color = withAlpha(T.panel, (T.alpha * 255).toInt())
@@ -1178,7 +1182,7 @@ class MatBg(val a: MainActivity, val host: View, val r: Float) : android.graphic
 class BlurLayer(ctx: Context, val a: MainActivity) : View(ctx) {
     val vis = ArrayList<BlurShapes>()
     override fun onDraw(c: Canvas) {
-        val b = a.ui.blur; if (!a.blurOn || b.out == null) return
+        val b = a.ui.blur; if (!a.blurOn || !a.seeThru || b.out == null) return
         vis.clear(); for ((v, sh) in b.shapes) if (v.visibility == View.VISIBLE) vis.add(sh)
         if (vis.isNotEmpty()) b.paintShapes(c, width.toFloat(), height.toFloat(), vis, this)
     }

@@ -99,7 +99,7 @@ You can add your own buttons to any of these in **Remote Buttons** in the main m
 
 Search, Playlists, TV Guide, Show/Hide hidden channels, Last Channel, Remote Buttons and **Settings**.
 
-**Settings** holds Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Buffer Size, Sleep Timer, Playlist Refresh, Guide Refresh, Guide Length, Update EPG Now, favorites sorting, App Update and the Error Log.
+**Settings** holds Themes, Font Size, Seasonal Decorations, Blur Behind Menus, Transparency, Buffering (Fast Start or Steady), Sleep Timer, Playlist Refresh, Guide Refresh, Guide Length, Update EPG Now, favorites sorting, App Update and the Error Log.
 
 ## Backup
 

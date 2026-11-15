@@ -45,14 +45,15 @@ import org.json.JSONObject
 
 // settings panel (Settings screen): rows, headings, descriptions and what each row does; the drawing is in Ui.drawSettings
 // settings panel rows: name to current value
-// rows: 0 Themes, 1 Font size, 2 Seasonal decorations, 3 Blur behind menus | 4 Buffer size, 5 Sleep timer | 6 Playlist refresh, 7 Guide refresh,
-//       8 Guide length, 9 Update EPG now | 10 Favorites sort, 11 Within groups, 12 Reorder groups | 13 App update, 14 Error log
+// rows: 0 Themes, 1 Font size, 2 Seasonal decorations, 3 Blur behind menus, 4 Transparency | 5 Buffer size, 6 Sleep timer | 7 Playlist refresh,
+//       8 Guide refresh, 9 Guide length, 10 Update EPG now | 11 Favorites sort, 12 Within groups, 13 Reorder groups | 14 App update, 15 Error log
 fun MainActivity.settingsItems() = listOf(
     "Themes" to themeNames()[themeIdx.coerceIn(0, THEMES.lastIndex)],
     "Font Size" to FONT_NAMES[fontIdx],
     "Seasonal Decorations" to (if (seasonOn) "On" else "Off"),
     "Blur Behind Menus" to (if (android.os.Build.VERSION.SDK_INT < 24) "Not available" else if (blurOn) "On" else "Off"),
-    "Buffer Size" to BUF_NAMES[bufIdx],
+    "Transparency" to (if (seeThru) "On" else "Off"),
+    "Buffering" to BUF_NAMES[bufIdx],
     "Sleep Timer" to (if (sleepMin <= 0) "Off" else "$sleepMin min"),
     "Playlist Refresh" to (if (plDays <= 0) "Manual only" else if (plDays == 1) "Every day" else "Every $plDays days"),
     "Guide Refresh" to (if (epgHours <= 0) "Manual only" else "Every $epgHours hours"),
@@ -65,13 +66,13 @@ fun MainActivity.settingsItems() = listOf(
     "Error Log" to (if (errLog.isEmpty()) "Empty" else "${errLog.size} entries"))
 
 // icon in the little square at the start of each row
-val SETTING_ICONS = listOf("palette", "text", "leaf", "drop", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "down", "info")
+val SETTING_ICONS = listOf("palette", "text", "leaf", "drop", "drop", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "down", "info")
 
 // a heading above these rows
-fun MainActivity.settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 4 -> "PLAYBACK"; 6 -> "PLAYLISTS & TV GUIDE"; 10 -> "FAVORITES"; 13 -> "APP"; else -> null }
+fun MainActivity.settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 5 -> "PLAYBACK"; 7 -> "PLAYLISTS & TV GUIDE"; 11 -> "FAVORITES"; 14 -> "APP"; else -> null }
 
 // rows that are changed with LEFT / RIGHT
-fun MainActivity.settingArrows(i: Int): Boolean = i in 1..8 || i == 10 || i == 11
+fun MainActivity.settingArrows(i: Int): Boolean = i in 1..9 && i != 4 || i == 11 || i == 12
 
 // the explanation of the selected row (shown in the footer)
 fun MainActivity.settingDesc(i: Int): String = when (i) {
@@ -80,22 +81,23 @@ fun MainActivity.settingDesc(i: Int): String = when (i) {
     2 -> "Holiday icons next to the selected row" + season().let { if (it != 0) ". Today: " + seasonName(it) else "" }
     3 -> if (android.os.Build.VERSION.SDK_INT < 24) "This TV is too old to copy the video picture (needs Android 7)"
          else "Blurs the picture behind menus, like Apple TV. Turn it off if the TV feels slow. Off by default on TVs with 1 GB of memory or less"
-    4 -> "Bigger = fewer stutters, slower channel start (applies when you leave Settings)"
-    5 -> "Closes the app after this time (a warning shows first)"
-    6 -> "How often the playlists are downloaded again"
-    7 -> "How often the TV guide updates itself"
-    8 -> "How many days of programmes to keep"
-    9 -> epgStatus()
-    10 -> when (favSort) {
+    4 -> "See the picture through the menus. Off = solid menus, lighter on slow TVs"
+    5 -> if (bufIdx == 0) "Channels start quickly. Best for most connections (applies when you leave Settings)" else "Channels take a moment longer to start but cope better with weak Wi-Fi (applies when you leave Settings)"
+    6 -> "Closes the app after this time (a warning shows first)"
+    7 -> "How often the playlists are downloaded again"
+    8 -> "How often the TV guide updates itself"
+    9 -> "How many days of programmes to keep"
+    10 -> epgStatus()
+    11 -> when (favSort) {
         0 -> "Grouped by category, in the order you choose"
         1 -> "In the order you added them"
         2 -> "By channel number, playlist by playlist"
         3 -> "Alphabetical, A to Z"
         else -> "Reverse alphabetical, Z to A"
     }
-    11 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
-    12 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
-    14 -> "Recent problems since the app started"
+    12 -> if (favSort == 0) "Order of the channels inside each group" else "Only used with Custom groups"
+    13 -> if (favSort == 0) "Move the favorite groups up or down" else "Only used with Custom groups"
+    15 -> "Recent problems since the app started"
     else -> when (updState) {
         1 -> "Contacting GitHub..."
         2 -> "You have the latest version. OK checks again"
@@ -108,13 +110,13 @@ fun MainActivity.settingDesc(i: Int): String = when (i) {
 }
 
 // "Within groups" and "Reorder groups" only apply to the Custom groups sort; blur needs Android 7
-fun MainActivity.settingEnabled(i: Int): Boolean = when (i) { 11, 12 -> favSort == 0; 3 -> android.os.Build.VERSION.SDK_INT >= 24; else -> true }
+fun MainActivity.settingEnabled(i: Int): Boolean = when (i) { 12, 13 -> favSort == 0; 3 -> seeThru && android.os.Build.VERSION.SDK_INT >= 24; else -> true }
 
 // what OK does on the selected row, for the key hint ("" = same as RIGHT)
 fun MainActivity.settingOkHint(i: Int): String = when {
     !settingEnabled(i) -> ""
-    i == 0 -> "open themes"; i == 9 -> "update now"; i == 12 || i == 14 -> "open"; i == 2 || i == 3 -> "switch on / off"
-    i == 13 -> when (updState) { 3 -> "download"; 5 -> "install"; 1, 4 -> ""; else -> "check for update" }
+    i == 0 -> "open themes"; i == 10 -> "update now"; i == 13 || i == 15 -> "open"; i in 2..4 -> "switch on / off"
+    i == 14 -> when (updState) { 3 -> "download"; 5 -> "install"; 1, 4 -> ""; else -> "check for update" }
     else -> ""
 }
 
@@ -125,22 +127,23 @@ fun MainActivity.settingAct(i: Int, d: Int) {
         1 -> { fontIdx = (fontIdx + d + FONT_NAMES.size) % FONT_NAMES.size; prefs.edit().putInt("fontSize", fontIdx).apply() }
         2 -> { seasonOn = !seasonOn; prefs.edit().putBoolean("season", seasonOn).apply() }
         3 -> setBlur(!blurOn)
-        4 -> { bufIdx = (bufIdx + d + BUF_NAMES.size) % BUF_NAMES.size; prefs.edit().putInt("buf", bufIdx).apply(); bufDirty = true }
-        5 -> { val k = SLEEP_OPTS.indexOf(sleepMin).let { if (it < 0) 0 else it }; setSleep(SLEEP_OPTS[(k + d + SLEEP_OPTS.size) % SLEEP_OPTS.size]) }
-        6 -> { val k = PL_OPTS.indexOf(plDays).let { if (it < 0) 3 else it }; plDays = PL_OPTS[(k + d + PL_OPTS.size) % PL_OPTS.size]; prefs.edit().putInt("plD", plDays).apply() }
-        7 -> {
+        4 -> toggleSeeThru(!seeThru)
+        5 -> { bufIdx = (bufIdx + d + BUF_NAMES.size) % BUF_NAMES.size; prefs.edit().putInt("buf", bufIdx).apply(); bufDirty = true }
+        6 -> { val k = SLEEP_OPTS.indexOf(sleepMin).let { if (it < 0) 0 else it }; setSleep(SLEEP_OPTS[(k + d + SLEEP_OPTS.size) % SLEEP_OPTS.size]) }
+        7 -> { val k = PL_OPTS.indexOf(plDays).let { if (it < 0) 3 else it }; plDays = PL_OPTS[(k + d + PL_OPTS.size) % PL_OPTS.size]; prefs.edit().putInt("plD", plDays).apply() }
+        8 -> {
             val k = REFRESH_OPTS.indexOf(epgHours).let { if (it < 0) 2 else it }
             epgHours = REFRESH_OPTS[(k + d + REFRESH_OPTS.size) % REFRESH_OPTS.size]; prefs.edit().putInt("epgH", epgHours).apply()
         }
-        8 -> {
+        9 -> {
             val k = DAYS_OPTS.indexOf(epgDaysN).let { if (it < 0) 3 else it }
             epgDaysN = DAYS_OPTS[(k + d + DAYS_OPTS.size) % DAYS_OPTS.size]; prefs.edit().putInt("epgD", epgDaysN).apply(); daysDirty = true
         }
-        9 -> if (d > 0) { if (epgJobs.get() > 0) flash("EPG is already updating") else checkEpg(true) }
-        10 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
-        11 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
-        12 -> if (favSort == 0 && d > 0) ui.openFavGroups()
-        13 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
-        14 -> if (d > 0) ui.openLog()
+        10 -> if (d > 0) { if (epgJobs.get() > 0) flash("EPG is already updating") else checkEpg(true) }
+        11 -> { favSort = (favSort + d + FAV_SORTS.size) % FAV_SORTS.size; prefs.edit().putInt("favSort", favSort).apply(); applyFavSort() }
+        12 -> if (favSort == 0) { favInner = (favInner + d + FAV_INNER.size) % FAV_INNER.size; prefs.edit().putInt("favInner", favInner).apply(); applyFavSort() }
+        13 -> if (favSort == 0 && d > 0) ui.openFavGroups()
+        14 -> if (d > 0) when (updState) { 3 -> downloadUpdate(); 5 -> installUpdate(); 1, 4 -> {}; else -> checkUpdate() }
+        15 -> if (d > 0) ui.openLog()
     }
 }
