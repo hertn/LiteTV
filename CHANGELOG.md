@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.1
+
+A small fix to the button bar.
+
+- The selected button at the start or end of a button bar no longer crowds the bar's edge. It now grows inwards, so both ends keep the same padding. This applies to the channel list's buttons and the TV Guide's show card.
+
 ## 2.4.0
 
 Manage playlists on the TV, menus that scroll the same way everywhere, and Back that gets you out fast.

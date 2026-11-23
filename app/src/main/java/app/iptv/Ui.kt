@@ -301,8 +301,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val sl = fitText(s, w.toInt(), h, spacing); c.save(); c.translate(x, y); sl.draw(c); c.restore()
     }
     // the focused item grows a little (tvOS focus); draw it inside this
-    inline fun lift(c: Canvas, on: Boolean, x: Float, y: Float, w: Float, h: Float, sc: Float, body: () -> Unit) {
-        if (on) { c.save(); c.scale(sc, sc, x + w / 2, y + h / 2); rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, FR, 0x40000000) }
+    inline fun lift(c: Canvas, on: Boolean, x: Float, y: Float, w: Float, h: Float, sc: Float, px: Float = x + w / 2, body: () -> Unit) {
+        if (on) { c.save(); c.scale(sc, sc, px, y + h / 2); rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, FR, 0x40000000) }
         body(); if (on) c.restore()
     }
     // white focus pill (or a faint one) with an icon and a label, used for every button row
@@ -325,7 +325,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         for ((k, o) in opts.withIndex()) {
             val bx = x + 12 * U + k * pitch - off; val by = y + 14 * U; val on = k == focus
             if (bx > x + maxW) break
-            lift(c, on, bx, by, bw, bh, 1.08f) {
+            // the end buttons grow inwards, so a focused one keeps the card's 12 px padding (growing from the middle ate it)
+            val px = when (k) { 0 -> bx; opts.lastIndex -> bx + bw; else -> bx + bw / 2 }
+            lift(c, on, bx, by, bw, bh, 1.08f, px) {
                 rr(c, bx, by, bw, bh, FR, if (on) FOC else FILL)
                 val col = if (on) ONF else WHITE
                 // positions follow the button height, so two-line labels stay inside the button at any row size / font size
