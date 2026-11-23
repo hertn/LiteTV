@@ -1302,8 +1302,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             txt(c, labels[k], x + pW - 68 * U, cy, 500 * U, 24f, SEC, 500, Paint.Align.RIGHT)
         }
         val t = THEMES[themeSel.coerceIn(0, THEMES.lastIndex)]
-        para(c, (if (t.seasonal) "Seasonal themes also colour the menu background. " else "") +
-            "The selected row is outlined in it too. Everything else stays neutral: white focus, " + (if (t.gold) "gold" else "white") + " progress bars, red for live.",
+        para(c, if (t.seasonal) "Seasonal themes also colour the menu background and the highlight, and bring effects of their own. " +
+                "Progress bars stay " + (if (t.gold) "gold" else "white") + ", red for live."
+            else "The selected row is outlined in it too. Everything else stays neutral: white focus, white progress bars, red for live.",
             x + 40 * U, py + 420 * U, pW - 80 * U, 80 * U, 24f, SEC)
     }
 
