@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.3.0
+
+Pin a channel to the corner, seasonal themes that come alive, and simpler Settings.
+
+**Pin a channel**
+
+- New **Pin** tile on the OK screen: the channel shrinks into a corner and keeps playing muted while you watch something else, handy for waiting out an ad break. It shows the logo, the show, LIVE and the time left.
+- The pinned tile lets you **Swap** the two channels, move it to another **Corner** (each OK goes round the corners) or **Unpin** it.
+- While a channel is pinned, Back swaps with it, and the new **Swap Pinned** remote action (Yellow by default) does the same. Hold Back to unpin; hold it again to exit.
+- Going back to the pinned channel shows a "pinned" notice; OK brings it back full screen.
+
+**Seasonal themes**
+
+- **Christmas**: red highlight, snow falling over the menus, and a blinking garland on the main menu.
+- **New Year**: sparkling gold highlight, gold confetti and a string of gold beads with twinkling stars on the main menu.
+- **Halloween**: green highlight, and three bats fly out of the main menu each time it opens.
+- Seasonal icon: the turkey shows on Thanksgiving Day only, and a snowflake ("Winter") follows until December.
+
+**Settings and menus**
+
+- Settings opens on six categories: Remote Buttons, Appearance, Playback, Playlists & TV Guide, Favorites and App.
+- Every page and pop-up has a round Back button at the top; Search, Playlists and Add Playlist lost their Cancel and Close buttons.
+- All menus open at the same height, and highlights have rounder corners.
+- Menus now slide out when they close instead of vanishing.
+- The channel info card shows only when you change channel, not on Back or swaps.
+- Remote Buttons stops at the bottom of its list, the Themes preview sits at the top, and the "OK to use" hints are gone.
+- Faster first start after an update.
+
 ## 2.2.1
 
 Small fixes to panels and the OK screen.

@@ -26,10 +26,12 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 - Guide length setting (2 to 14 days, limited by what your guide file contains)
 - Favorites, hidden channels (unhide them on the Hidden Channels page), and search across all playlists
 - The channel list goes round: past the last channel it starts again from the first, with a line marking where
+- Pin a channel: it keeps playing muted in a corner while you watch another (handy for waiting out an ad break), and one button swaps the two
 - Audio track, subtitles, aspect ratio (Fit, Zoom, Wider, Taller, for shows with black bars) and audio delay per channel (to fix out-of-sync sound)
 - Remote Buttons: see what every button does, add your own buttons, and hold OK for the menu on remotes without a Menu button
 - Channel logos and clear stream error messages (for example "Server returned HTTP 404 (stream not found)")
-- Themes: eight accent colours plus Christmas, Halloween and New Year themes
+- Themes: eight accent colours plus seasonal themes: Christmas (red highlight, garland, falling snow), New Year (sparkling gold, confetti) and Halloween (green highlight, bats flying out of the menu)
+- Settings in six clear categories, with a round Back button on every page and pop-up
 - Seasonal decorations for holidays (can be turned off)
 - Set up playlists and guides from your phone by scanning a QR code
 - Backup and restore of playlists, guides and favorites
@@ -47,12 +49,24 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
     <td width="50%" align="center" valign="top"><img src="docs/program.jpg" width="100%" alt="Program info for Mr. Bean: LIVE badge, category, channel, time, minutes left, description, Watch Live and Guide buttons, and a Later on row"><br><b>Program info</b></td>
   </tr>
   <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/pin.jpg" width="100%" alt="A Christmas tree on the Holidayscapes channel, with Stingray Cozy Cafe pinned in the top-right corner: a small live picture with its logo, name and a LIVE badge"><br><b>Pin a channel</b></td>
     <td width="50%" align="center" valign="top"><img src="docs/channel-settings.jpg" width="100%" alt="The OK screen: the show on now with its progress and tiles for Program Info, TV Guide, audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller"><br><b>Channel settings</b></td>
-    <td width="50%" align="center" valign="top"><img src="docs/reminders.jpg" width="100%" alt="Reminders: a strip of the days that have reminders, and the chosen day's reminder with its time, channel logo and show"><br><b>Reminders</b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with a preview of where the colour shows"><br><b>Themes</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/reminders.jpg" width="100%" alt="Reminders: a strip of the days that have reminders, and the chosen day's reminder with its time, channel logo and show"><br><b>Reminders</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/settings.jpg" width="100%" alt="Settings in the Christmas theme: a round Back button and six categories, Remote Buttons (selected, in red), Appearance, Playback, Playlists &amp; TV Guide, Favorites and App, each with its current value"><br><b>Settings</b></td>
+  </tr>
+  <tr>
     <td width="50%" align="center" valign="top"><img src="docs/remote-buttons.jpg" width="100%" alt="Remote Buttons: every action with its buttons, such as Open Main Menu with Menu and Hold OK, and a card explaining the selected one"><br><b>Remote buttons</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/themes.jpg" width="100%" alt="Themes: eight accent colours and the Christmas, Halloween and New Year themes, with Christmas chosen in red and a preview of where the colour shows"><br><b>Themes</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/christmas.jpg" width="100%" alt="The main menu in the Christmas theme: dark green glass, a red highlight on Search, a garland of coloured lights along the top and snow falling over the picture"><br><b>Christmas theme</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/new-year.jpg" width="100%" alt="The main menu in the New Year theme: black glass, a sparkling gold highlight on Search, a string of gold beads with stars along the top and gold confetti, with a pinned channel in the corner"><br><b>New Year theme</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/halloween.jpg" width="100%" alt="The main menu in the Halloween theme: dark purple glass, a green highlight on Search and three bats flying up out of the menu"><br><b>Halloween theme</b></td>
+    <td width="50%"></td>
   </tr>
 </table>
 

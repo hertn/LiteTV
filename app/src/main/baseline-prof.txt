@@ -1,0 +1,6 @@
+# warm start for the hot drawing code (installed by androidx.profileinstaller, already in the app)
+HSPLapp/iptv/Snow;->**(**)**
+HSPLapp/iptv/Ui;->**(**)**
+HSPLapp/iptv/Ui$Blur;->**(**)**
+Lapp/iptv/Snow;
+Lapp/iptv/Ui;

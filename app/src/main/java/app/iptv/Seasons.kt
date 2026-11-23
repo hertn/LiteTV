@@ -47,7 +47,7 @@ import org.json.JSONObject
 const val SE_PARTY = 1; const val SE_HEART = 2; const val SE_FLAG_EE = 3; const val SE_BUN = 4; const val SE_WILLOW = 5; const val SE_EGG = 6
 const val SE_VAPPU = 7; const val SE_WREATH = 8; const val SE_FIREWORK = 9; const val SE_CORNFLOWER = 10; const val SE_LEAF = 11; const val SE_CAKE = 12
 const val SE_PUMPKIN = 13; const val SE_BAT = 14; const val SE_ACORN = 15; const val SE_TURKEY = 16; const val SE_FLAG_FI = 17
-const val SE_HAT = 18; const val SE_HAT_GIFT = 19
+const val SE_HAT = 18; const val SE_HAT_GIFT = 19; const val SE_SNOW = 20
 const val SE_CANDLES = 21   // 21..24 = Advent wreath with 1..4 candles lit
 
 fun doyOf(y: Int, m: Int, d: Int): Int = java.util.GregorianCalendar(y, m - 1, d).get(java.util.Calendar.DAY_OF_YEAR)
@@ -95,12 +95,12 @@ fun seasonId(t: Long): Int {
     if (n == es - 7) return SE_WILLOW               // Palm Sunday
     if (n in es - 2..es + 1) return SE_EGG          // Good Friday - Easter Monday
     val tg = thanksDoy(y)
-    if (n in tg - 3..tg + 1) return SE_TURKEY       // Thanksgiving week, Monday - Friday
+    if (n == tg) return SE_TURKEY                   // Thanksgiving Day only
     val a4 = advent4Doy(y)
     for (k in 0..3) if (n == a4 - 7 * (3 - k)) return SE_CANDLES + k   // the four Advent Sundays
     // the month's own icon
     if (m == 12) return SE_HAT
-    if (m == 11) return SE_ACORN
+    if (m == 11) return if (n > tg) SE_SNOW else SE_ACORN   // after Thanksgiving: winter, but no Christmas before December
     if (m == 10) return if (d >= 15) SE_PUMPKIN else SE_LEAF
     if (m == 9) return SE_LEAF
     return 0
@@ -125,6 +125,7 @@ fun seasonName(id: Int): String = when (id) {
     SE_ACORN -> "November"
     SE_TURKEY -> "Thanksgiving"
     SE_FLAG_FI -> "Finnish Independence Day"
+    SE_SNOW -> "Winter"
     SE_HAT -> "December"
     SE_HAT_GIFT -> "Christmas"
     in SE_CANDLES..SE_CANDLES + 3 -> "Advent, candle ${id - SE_CANDLES + 1}"

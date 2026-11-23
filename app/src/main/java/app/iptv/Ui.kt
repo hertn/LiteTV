@@ -38,7 +38,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 
     // colours (white text on the material; "secondary" and "tertiary" are white at 64% / 52%, as on Apple TV)
     val WHITE = -1; val SEC = 0xA3FFFFFF.toInt(); val TER = 0x85FFFFFF.toInt()
-    val ONF = 0xFF1C1C1E.toInt(); val ONF2 = 0x9E1C1C1E.toInt()   // text on the white focus highlight
+    val FOC: Int get() = if (T.redFocus) T.accent or 0xFF000000.toInt() else if (T.party) GOLDF else WHITE
+    val GOLDF = 0xFFE8C66B.toInt()   // stands for "sparkling gold": rr/fill/circles drawn in it get the moving gold + glitter (plain gold where that is not possible)   // the focus highlight: white (Christmas: its red)
+    val ONF: Int get() = if (T.redFocus) WHITE else 0xFF1C1C1E.toInt(); val ONF2: Int get() = if (T.redFocus) 0xCCFFFFFF.toInt() else 0x9E1C1C1E.toInt()   // text on the focus highlight
     val SELBG = 0x24FFFFFF; val FILL = 0x14FFFFFF; val HAIR = 0x14FFFFFF; val TRACK = 0x38FFFFFF; val BARC = 0xEBFFFFFF.toInt()
     val GRAY: Int get() = SEC
     val OUTLINE: Int get() = withAlpha(T.accent, if (T.gold) 0xBF else 0xCC)   // selected row / card outline: the theme's accent
@@ -54,7 +56,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     var dimV = 0f; var dimAt = 0L   // guide logo dimming, animated
     // any change between two screens while the UI is up crossfades (drawScreens); opening it from the video slides it in (show)
     var mode = 0
-        set(v) { if (v != field && field != 0 && v != 0 && visibility == View.VISIBLE && animOn()) { fromMode = field; fadeT0 = 0L }; field = v }
+        set(v) { if (v != field && field != 0 && v != 0 && visibility == View.VISIBLE && animOn()) { fromMode = field; fadeT0 = 0L }; if (v != field) bkF = v == 13; field = v }
     var sideLvl = 0; var sideFocus = 1; var catSel = 1; var plSel = 0   // sideLvl: 0 none, 1 categories, 2 playlists + categories
     var shiftD = -1f; var shiftAt = 0L   // the side panels' slide: where the lists start now, eased toward their place
     var side: Boolean
@@ -62,6 +64,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         set(v) { if (!v) sideLvl = 0 }
     var sel = 0; var oi = 0; var col = 1; var dayI = 0; var progI = 0; var menuSel = 0
     var subI = 0; var subOpen = false; var oj = 0
+    var setCat = -1   // Settings: -1 = the categories, else the category open (SET_CATS)
     var themeSel = 0; var setSel = 0; var grpSel = 0; var grpGrab = false; var logSel = 0; var remSel = 0; var remDay = 0; var hidSel = 0
     var infoRow = 0; var laterSel = 0   // Program Info: 0 = the buttons, 1 = the "Later on" shows (OK sets / removes a reminder)
     var infoCh: Ch? = null; var infoProg: Prog? = null; var backMode = 1; var infoBtn = 0; var infoBack = 1   // infoBack: the screen BACK returns to from Program Info
@@ -141,8 +144,33 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         c.save(); c.clipRect(x, cy - tsz(sz), x + maxW, cy + tsz(sz)); c.drawText(s, x - off, cy + tsz(sz) * 0.36f, tp); c.restore()
         if (off < over) postInvalidateOnAnimation() else if (el <= 0) postInvalidateDelayed(-el + 16)
     }
-    fun fill(c: Canvas, x: Float, y: Float, w: Float, h: Float, color: Int) { p.shader = null; p.color = color; c.drawRect(x, y, x + w, y + h, p) }
-    fun rr(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float, color: Int) { p.shader = null; p.style = Paint.Style.FILL; p.color = color; c.drawRoundRect(RectF(x, y, x + w, y + h), r, r, p) }
+    fun fill(c: Canvas, x: Float, y: Float, w: Float, h: Float, color: Int) { p.shader = null; if (color == GOLDF && T.party) { sparkle(c) { c.drawRect(x, y, x + w, y + h, it) }; return }; p.color = color; c.drawRect(x, y, x + w, y + h, p) }
+    fun rr(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float, color: Int) {
+        p.shader = null; p.style = Paint.Style.FILL
+        if (color == GOLDF && T.party) { goldRR.set(x, y, x + w, y + h); sparkle(c) { c.drawRoundRect(goldRR, r, r, it) }; return }
+        p.color = color; c.drawRoundRect(RectF(x, y, x + w, y + h), r, r, p)
+    }
+    // New Year focus: the shimmering gold, a fine grain over it and glitter specks that twinkle (two sets taking turns)
+    private val goldRR = RectF(); private var grain: android.graphics.BitmapShader? = null; private val glit = arrayOfNulls<android.graphics.BitmapShader>(2); private val gM = Matrix()
+    private fun noiseTile(seed: Long, specks: Boolean): android.graphics.BitmapShader {
+        val n = 96; val px = IntArray(n * n); val r = java.util.Random(seed)
+        if (specks) repeat(26) { val i = r.nextInt(n * n); val a = 150 + r.nextInt(105); px[i] = (a shl 24) or 0xFFFFFF
+            if (r.nextInt(3) == 0) for (o in intArrayOf(1, -1, n, -n)) { val j = i + o; if (j in px.indices) px[j] = ((a / 3) shl 24) or 0xFFF4D0 } }   // a few bigger, softer ones
+        else for (i in px.indices) { val v = r.nextInt(255); px[i] = if (v > 127) ((v - 127) / 4 shl 24) or 0xFFFFFF else ((127 - v) / 3 shl 24) }
+        return android.graphics.BitmapShader(Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+    }
+    fun sparkle(c: Canvas, shape: (Paint) -> Unit) {
+        accentPaint(p); shape(p)
+        val g = grain ?: noiseTile(7, false).also { grain = it }
+        val t = if (animOn()) SystemClock.uptimeMillis() / 1000f else 0f
+        gM.setScale(U * 1.4f, U * 1.4f); g.setLocalMatrix(gM); p.shader = g; p.color = -1; p.alpha = 255; shape(p)
+        for (k in 0..1) {
+            val s = glit[k] ?: noiseTile(11L + k, true).also { glit[k] = it }
+            gM.setScale(U * 1.6f, U * 1.6f); gM.postTranslate(k * 37 * U + t * 6 * U, k * 23 * U); s.setLocalMatrix(gM)
+            p.shader = s; p.alpha = ((0.5f + 0.5f * Math.sin(t * 3.1 + k * Math.PI).toFloat()) * 255).toInt(); shape(p)
+        }
+        p.shader = null; p.alpha = 255
+    }
     fun outline(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float) {
         p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = 2 * U; p.color = OUTLINE
         c.drawRoundRect(RectF(x + U, y + U, x + w - U, y + h - U), r, r, p); p.style = Paint.Style.FILL
@@ -164,7 +192,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 floatArrayOf(0f, 0.22f, 0.36f, 0.5f, 0.75f, 1f), Shader.TileMode.MIRROR)
         }
         val ph = if (animOn()) (SystemClock.uptimeMillis() % 4000L) / 4000f else 0.3f
-        goldM.setTranslate(ph * 1200 * U, 0f); goldSh!!.setLocalMatrix(goldM); pt.color = -1; pt.shader = goldSh
+        goldM.setTranslate(ph * 1200 * U, ph * 420 * U);   // along the gradient, exactly one mirrored repeat (2 x 600,210): the loop has no seam
+        goldSh!!.setLocalMatrix(goldM); pt.color = -1; pt.shader = goldSh
     }
 
     // Apple material: the blurred, dimmed video under the shape, then the theme's tint. Without blur: the tint nearly solid
@@ -172,6 +201,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun beginShapes(v: View) { blur.cur = blur.shapes.getOrPut(v) { BlurShapes() }.also { it.n = 0 }; a.blurLayer.invalidate() }
     val mPath = Path(); var matOx = 0f   // how far the canvas is shifted right while drawing (lists move right when side panels open)
     fun mat(c: Canvas, path: Path, tint: Int = T.panel) {
+        if (T.fx && !snowSet) { path.computeBounds(snowR, true); a.snow.card(snowR.left + matOx, snowR.top, snowR.width(), snowR.height(), CR) }   // + the canvas shift
+        snowSet = false   // snow piles on every card's top
         val b = blur.out
         if (!a.seeThru) p.color = withAlpha(tint, 0xFF)
         else if (b != null && a.blurOn) {
@@ -180,11 +211,16 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         } else p.color = withAlpha(tint, 0xED)
         p.shader = null; p.style = Paint.Style.FILL; c.drawPath(path, p)
     }
+    private val snowR = RectF(); private var snowSet = false   // snowSet: the caller already told the snow layer the card's real shape
+    fun snowCard(x: Float, y: Float, w: Float, h: Float, r: Float) { if (T.fx) { a.snow.card(x + matOx, y, w, h, r); snowSet = true } }
     fun matRect(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float) {
+        snowCard(x, y, w, h, r)
         mPath.reset(); mPath.addRoundRect(RectF(x, y, x + w, y + h), r, r, Path.Direction.CW); mat(c, mPath)
     }
     // floating glass card (main menu, channel list, side panels, guide): 36 px from the screen edges, 40 px corners,
     // a faint light edge so it reads as a separate layer over the video
+    val PT: Float get() = 100 * U   // top of every menu card and page (main menu, Settings, Remote Buttons, Reminders...): they all open at the same height
+    val FR: Float get() = 22 * U   // corner radius of every focus highlight, tile and button (Apple TV-like round corners)
     val M: Float get() = 36 * U; val GAP: Float get() = 20 * U; val CR: Float get() = 40 * U
     fun glass(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float = CR) {
         matRect(c, x, y, w, h, r)
@@ -206,13 +242,15 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
     // a card with a popover pointer on its left, aimed at the selected row (centre y = py)
     fun matCard(c: Canvas, x: Float, y: Float, w: Float, h: Float, py: Float) {
-        mPath.reset(); mPath.addRoundRect(RectF(x, y, x + w, y + h), 26 * U, 26 * U, Path.Direction.CW)   // 26 = button radius 14 + padding 12
+        snowCard(x, y, w, h, FR + 12 * U)   // the card without its pointer
+        mPath.reset(); mPath.addRoundRect(RectF(x, y, x + w, y + h), FR + 12 * U, FR + 12 * U, Path.Direction.CW)   // button radius FR + padding 12: concentric corners
         val tri = Path(); tri.moveTo(x + 2 * U, py - 36 * U); tri.lineTo(x - 27 * U, py); tri.lineTo(x + 2 * U, py + 36 * U); tri.close()
         mPath.op(tri, Path.Op.UNION); mat(c, mPath)   // no outline: the selected row's outline alone shows where focus is
     }
     // the same card with the pointer underneath, aimed at the tile it belongs to (centre x = px)
     fun matCardDown(c: Canvas, x: Float, y: Float, w: Float, h: Float, px: Float) {
-        mPath.reset(); mPath.addRoundRect(RectF(x, y, x + w, y + h), 26 * U, 26 * U, Path.Direction.CW)
+        snowCard(x, y, w, h, FR + 12 * U)
+        mPath.reset(); mPath.addRoundRect(RectF(x, y, x + w, y + h), FR + 12 * U, FR + 12 * U, Path.Direction.CW)
         val tri = Path(); tri.moveTo(px - 36 * U, y + h - 2 * U); tri.lineTo(px, y + h + 27 * U); tri.lineTo(px + 36 * U, y + h - 2 * U); tri.close()
         mPath.op(tri, Path.Op.UNION); mat(c, mPath)
     }
@@ -261,13 +299,13 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
     // the focused item grows a little (tvOS focus); draw it inside this
     inline fun lift(c: Canvas, on: Boolean, x: Float, y: Float, w: Float, h: Float, sc: Float, body: () -> Unit) {
-        if (on) { c.save(); c.scale(sc, sc, x + w / 2, y + h / 2); rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, 16 * U, 0x40000000) }
+        if (on) { c.save(); c.scale(sc, sc, x + w / 2, y + h / 2); rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, FR, 0x40000000) }
         body(); if (on) c.restore()
     }
     // white focus pill (or a faint one) with an icon and a label, used for every button row
     fun button(c: Canvas, x: Float, y: Float, w: Float, h: Float, on: Boolean, ic: String?, label: String, sz: Float = 29f, sc: Float = 1.06f) {
         lift(c, on, x, y, w, h, sc) {
-            rr(c, x, y, w, h, 14 * U, if (on) WHITE else 0x24FFFFFF)
+            rr(c, x, y, w, h, FR, if (on) FOC else 0x24FFFFFF)
             val col = if (on) ONF else WHITE; val lw = tw(label, sz, 600); val iw = if (ic != null) 30 * U + 14 * U else 0f
             val sx = x + (w - lw - iw) / 2
             if (ic != null) icon(c, ic, sx + 15 * U, y + h / 2, 30 * U, col)
@@ -285,7 +323,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val bx = x + 12 * U + k * pitch - off; val by = y + 14 * U; val on = k == focus
             if (bx > x + maxW) break
             lift(c, on, bx, by, bw, bh, 1.08f) {
-                rr(c, bx, by, bw, bh, 14 * U, if (on) WHITE else FILL)
+                rr(c, bx, by, bw, bh, FR, if (on) FOC else FILL)
                 val col = if (on) ONF else WHITE
                 // positions follow the button height, so two-line labels stay inside the button at any row size / font size
                 val ls = split2(o.first, bw - 16 * U, 23f, 600)
@@ -298,7 +336,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         // dark fade where buttons are cut off, so it is clear there are more (inside the card's rounded edge)
         val fw = 110 * U; val fy0 = y + 2 * U; val fy1 = y + rowH() - 4 * U
-        if (moreR || moreL) { val cp = Path(); cp.addRoundRect(RectF(x, fy0, x + maxW, fy1), 26 * U, 26 * U, Path.Direction.CW); c.clipPath(cp) }
+        if (moreR || moreL) { val cp = Path(); cp.addRoundRect(RectF(x, fy0, x + maxW, fy1), FR + 12 * U, FR + 12 * U, Path.Direction.CW); c.clipPath(cp) }
         if (moreR) { fadeP.shader = LinearGradient(x + maxW - fw, 0f, x + maxW, 0f, 0, 0xB3000000.toInt(), Shader.TileMode.CLAMP); c.drawRect(x + maxW - fw, fy0, x + maxW, fy1, fadeP) }
         if (moreL) { fadeP.shader = LinearGradient(x, 0f, x + fw, 0f, 0xB3000000.toInt(), 0, Shader.TileMode.CLAMP); c.drawRect(x, fy0, x + fw, fy1, fadeP) }
         c.restore()
@@ -341,9 +379,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun show(m: Int) {
         if (visibility != View.VISIBLE) blur.shapes[this]?.n = 0   // forget the last menu's blur shapes, or BlurLayer flashes them for one frame
         // a screen change while up crossfades (the mode setter); coming up from the video it slides in a little and fades in
-        val appear = visibility != View.VISIBLE; if (appear) fromMode = 0
+        val appear = visibility != View.VISIBLE || outMode != 0; if (appear) { fromMode = 0; outMode = 0 }   // reopened while sliding out: comes back in
         mode = m; side = false; visibility = View.VISIBLE; a.banner.visibility = View.GONE; touch(); requestFocus(); blur.start()
         if (appear) { shiftD = -1f; slideIn(m) }
+        a.pip.place()
     }
     // Apple-like entrance: 260 ms, fast start and a long soft stop; the view and its blur move together (both are GPU layers, no redraws)
     fun slideIn(m: Int) {
@@ -352,14 +391,27 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             v.animate().cancel()
             if (!animOn()) { v.alpha = to; v.translationX = 0f; v.translationY = 0f; continue }
             v.alpha = 0f; v.translationX = dx; v.translationY = dy
-            v.animate().alpha(to).translationX(0f).translationY(0f).setDuration(260).setInterpolator(EASE).start()
+            v.animate().alpha(to).translationX(0f).translationY(0f).setDuration(320).setInterpolator(EASE).start()
+        }
+    }
+    // the way back: the last screen keeps being drawn (outMode, keys already go to the video) as it slides and fades away
+    var outMode = 0
+    fun slideOut(m: Int) {
+        val dx = when (m) { 4 -> 0f; 11 -> 30 * U; else -> -30 * U }; val dy = if (m == 4) 30 * U else 0f
+        outMode = m
+        for (v in listOf(this, a.blurLayer)) {
+            v.animate().cancel()
+            v.animate().alpha(0f).translationX(dx).translationY(dy).setDuration(240).setInterpolator(EASE_IN).withEndAction {
+                if (v === this) { if (outMode != 0 && mode == 0) visibility = View.GONE; outMode = 0 }
+                if (mode == 0) { v.translationX = 0f; v.translationY = 0f; if (v === a.blurLayer) v.alpha = 1f }
+            }.start()
         }
     }
     fun open(m: Int) { dimAt = 0L; oi = 0; col = 1; cardY = -1f; show(m); reset(false) }
     fun openGuide(ch: Ch) { open(2); val k = a.shown.indexOf(ch); if (k >= 0) { sel = k; progI = defProg(); invalidate() } }
     fun openMenu() { menuSel = 0; show(3); invalidate() }
     fun openThemes() { themeSel = a.themeIdx; show(6); invalidate() }
-    fun openSettings() { setSel = 0; show(8); invalidate() }
+    fun openSettings() { setCat = -1; setSel = 0; show(8); invalidate() }
     fun openFavGroups() { grpSel = 0; grpGrab = false; show(9); invalidate() }
     fun openKeys() { rbSel = 0; rbSub = 0; show(12); invalidate() }
     fun openLog() { logSel = 0; show(10); invalidate() }
@@ -368,7 +420,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     // from the player (OK, or a channel change): Back closes it, and UP/DOWN keep changing channels while no list is open
     fun openSubPlayer(quick: Boolean) {
         if (mode == 4 && backMode == 0) { if (!quick) { quickHide = false; okIdle = true }; touch(); invalidate(); return }   // already up: just refresh for the new channel
-        quickHide = quick; okIdle = !quick; backMode = 0; subI = -2; subOpen = false; show(4); touch(); invalidate()
+        quickHide = quick; okIdle = !quick; backMode = 0; subI = -3; subOpen = false; show(4); touch(); invalidate()
     }
     fun openInfo(ch: Ch, pr: Prog?) { infoRow = 0; laterSel = 0; infoBack = if (mode == 4 || mode == 2 || mode == 14 || mode == 16) mode else 1; infoCh = ch; infoProg = pr; infoBtn = 0; show(5); invalidate() }
     // "Starting now" card for a reminder (replaces whatever screen was open); it closes itself after 20 s
@@ -379,7 +431,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun close() {
         if (mode == 6) a.setTheme(a.themeIdx, false)   // leaving the theme list without pressing OK: drop the preview
         a.settingsDone()
-        grpGrab = false; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); visibility = View.GONE; if (a.searching) a.endSearch()
+        val was = mode
+        grpGrab = false; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (a.searching) a.endSearch()
+        if (animOn() && visibility == View.VISIBLE && was != 0) slideOut(was) else visibility = View.GONE
+        a.pip.place()
     }
     // side panels: Favorites is its own entry above the playlists (row 0); its categories are the favorite groups.
     // The playlists' own category lists leave out Favorites (groups[0]), so their rows are groups shifted by one.
@@ -414,8 +469,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
     }
     val EASE = android.view.animation.PathInterpolator(0.2f, 0.8f, 0.2f, 1f)
+    val EASE_IN = android.view.animation.PathInterpolator(0.4f, 0f, 0.9f, 0.6f)   // leaving: starts gently, gone quickly
     fun drawScreens(c: Canvas) {
         U = width / 1920f
+        if (mode == 0) { if (outMode != 0) { val w0 = width.toFloat(); val h0 = height.toFloat(); drawMode(c, outMode, w0, h0, if (shiftD < 0f) M else shiftD) }; return }   // sliding out (its snow already fell)
+        a.snow.begin()
         val w = width.toFloat(); val h = height.toFloat()
         val pw = w * 0.19f; val cw = 420 * U; val panels = sideLvl > 0 && (mode == 1 || mode == 2)
         val shift = if (panels) M + (if (sideLvl >= 2) pw + GAP else 0f) + cw + GAP else M   // lists move right of the floating panels, nothing overlaps
@@ -441,6 +499,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             if (cx + cw > M - GAP + 1) drawPanel(c, cx, cw, h, if (a.grp == 0) "Favorite Groups" else "Categories", catItems(), catSel, catActive(), sideFocus == 1, null, true)
         }
         if (T.gold && animOn()) postInvalidateDelayed(66)   // the gold shimmer moves only while a screen is open
+        a.snow.end()
     }
 
     // ---------- channel list ----------
@@ -454,7 +513,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         stepJump(); val top = listTop(vp) + jd; val di = Math.floor(top.toDouble()).toInt(); val df = top - di   // rows slide through the highlight
         val hy = (vp - listTop(vp) + jh) * rh   // the highlight's row: fixed in slot S, except at the start of the list
         if (n > 0) {   // the highlight and the selected logo's grey box stay put; the logos slide through them
-            val y = hy; rr(c, 12 * U, y + 6 * U, lw - 24 * U, rh - 12 * U, 14 * U, SELBG); outline(c, 12 * U, y + 6 * U, lw - 24 * U, rh - 12 * U, 14 * U)
+            val y = hy; if (T.redFocus) rr(c, 12 * U, y + 6 * U, lw - 24 * U, rh - 12 * U, FR, FOC) else { rr(c, 12 * U, y + 6 * U, lw - 24 * U, rh - 12 * U, FR, SELBG); outline(c, 12 * U, y + 6 * U, lw - 24 * U, rh - 12 * U, FR) }
             rr(c, 22 * U, y + 16 * U, logoW - 30 * U, rh - 32 * U, 10 * U, FILL)
         }
         for (s in 0..8) {
@@ -464,10 +523,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             tile(c, ch, 22 * U, y + 16 * U, logoW - 30 * U, rh - 32 * U, if (ch == a.cur && !on) FILL else 0)   // 10 px inside the row highlight; the playing logo carries its own grey box, the selected one sits in the fixed box
             val tag = if (a.multi()) (a.sources.find { it.id == ch.src }?.let { "  ·  ${it.name}" } ?: "") else ""
             val nm = "${ch.num}: ${ch.name}$tag"
-            stxt(c, nm, tx, y + rh * 0.24f - 9 * U, tmax, 23f, SEC, 400, on)
+            stxt(c, nm, tx, y + rh * 0.24f - 9 * U, tmax, 23f, if (on && T.redFocus) ONF2 else SEC, 400, on)
             stxt(c, pr?.title ?: "", tx, y + rh * 0.50f - 11 * U, tmax, 31f, WHITE, 600, on)
             if (pr != null) {
-                txt(c, "${a.hm.format(pr.start)} – ${a.hm.format(pr.stop)}" + (if (on) "  ·  ${minLeft(pr)} min left" else ""), tx, y + rh * 0.74f - 8 * U, tmax, 22f, SEC)
+                txt(c, "${a.hm.format(pr.start)} – ${a.hm.format(pr.stop)}" + (if (on) "  ·  ${minLeft(pr)} min left" else ""), tx, y + rh * 0.74f - 8 * U, tmax, 22f, if (on && T.redFocus) ONF2 else SEC)
                 progress(c, tx, y + rh * 0.84f, lw - logoW - 36 * U, pr)
             }
         }
@@ -497,7 +556,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val cyp = pc + j * (ph0 + 10 * U); if (cyp - ph0 / 2 < M || cyp + ph0 / 2 > h - M) continue
             val day = dys.getOrNull(dayI - dir * j) ?: continue; val i = dys.indexOf(day); val on = j == 0
             glass(c, px0, cyp - ph0 / 2, pw0, ph0, ph0 / 2)
-            if (on) rr(c, px0, cyp - ph0 / 2, pw0, ph0, ph0 / 2, WHITE)   // the chosen day: a solid white pill, like the selected show in the TV Guide grid
+            if (on) rr(c, px0, cyp - ph0 / 2, pw0, ph0, ph0 / 2, FOC)   // the chosen day: a solid white pill, like the selected show in the TV Guide grid
             val lb = if (i == ti) "Today" else if (i == ti + 1) "Tomorrow" else if (i == ti - 1) "Yesterday" else wd.format(day)
             txt(c, lb, px0 + pw0 / 2, cyp - 14 * U, pw0 - 16 * U, 22f, if (on) ONF else SEC, 600, Paint.Align.CENTER)
             txt(c, dd.format(day), px0 + pw0 / 2, cyp + 15 * U, pw0 - 16 * U, 28f, if (on) ONF else WHITE, 700, Paint.Align.CENTER)
@@ -513,8 +572,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val dimA = (255 - (255 - 46) * dimV).toInt()
         glass(c, dw, M, cw, gh)
         beginScroll(c, dw, M, cw, gh)
-        rr(c, dw + 12 * U, S * rh + 6 * U, cw - 24 * U, rh - 12 * U, 14 * U, SELBG)
-        if (col == 1) outline(c, dw + 12 * U, S * rh + 6 * U, cw - 24 * U, rh - 12 * U, 14 * U)
+        rr(c, dw + 12 * U, S * rh + 6 * U, cw - 24 * U, rh - 12 * U, FR, SELBG)
+        if (col == 1) outline(c, dw + 12 * U, S * rh + 6 * U, cw - 24 * U, rh - 12 * U, FR)
         if (a.shown.isNotEmpty()) rr(c, dw + 22 * U, S * rh + 16 * U, cw - 44 * U, rh - 32 * U, 10 * U, FILL)   // the selected logo's grey box stays put while logos slide
         stepJump(); val di = Math.floor(jd.toDouble()).toInt(); val df = jd - di   // jump scroll, as in the channel list
         for (s in 0..8) {
@@ -531,12 +590,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         endScroll(c)
         glass(c, px, M, pw, gh)
         beginScroll(c, px, M + hd, pw, gh - hd)
-        rr(c, px + 12 * U, S * rh + 6 * U, pw - 24 * U, rh - 12 * U, 14 * U, SELBG)
-        if (col == 2) outline(c, px + 12 * U, S * rh + 6 * U, pw - 24 * U, rh - 12 * U, 14 * U)
+        rr(c, px + 12 * U, S * rh + 6 * U, pw - 24 * U, rh - 12 * U, FR, SELBG)
+        if (col == 2) outline(c, px + 12 * U, S * rh + 6 * U, pw - 24 * U, rh - 12 * U, FR)
         for (s in 0..7) {
             val y = s * rh; val on = s == S
             (if (at >= 0) all.getOrNull(at - (s - S)) else dp.getOrNull(progI - (s - S)))?.let { pr ->   // later shows above the selected one, earlier below (across midnight too)
-                if (!on && pr.start > now) rr(c, px + 12 * U, y + 6 * U, pw - 24 * U, rh - 12 * U, 14 * U, FILL)   // upcoming shows are a little lighter, as in the stable build
+                if (!on && pr.start > now) rr(c, px + 12 * U, y + 6 * U, pw - 24 * U, rh - 12 * U, FR, FILL)   // upcoming shows are a little lighter, as in the stable build
                 val lv = isLive(pr); val past = pr.stop <= now; var lx = px + 28 * U; val ty = y + rh * 0.30f
                 if (lv) lx += live(c, lx, ty, 15f) + 10 * U
                 val tl = "${a.hm.format(pr.start)} – ${a.hm.format(pr.stop)}"; txt(c, tl, lx, ty, pw - 60 * U, 22f, SEC); lx += tw(tl, 22f) + 10 * U
@@ -614,7 +673,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val labels = listOf("Audio", "Subtitles", "Aspect Ratio", "Audio Delay"); val short = listOf("Audio", "Subtitles", "Aspect", "Delay")
         val ics = listOf("audio", "cc", "aspect", "delay")
         val tw0 = 150 * U; val th0 = 118 * U; val pitch = tw0 + 12 * U; val pi = backMode == 0   // Program Info tile only from the player: the lists already have their own Program Info button
-        val px0 = w - 90 * U - (if (pi) 6 else 4) * pitch + 12 * U; val ty0 = y - 6 * U
+        val px0 = w - 90 * U - (if (pi) 7 else 4) * pitch + 12 * U; val ty0 = y - 6 * U
         // after a channel change: which buttons open the settings and the menu, so nobody has to guess
         val okL = a.keys.keys(KEY_ACTS[1]).firstOrNull()?.let { keyLabel(it) }
         val hint = (if (okL != null) listOf(okL to "Settings") else emptyList()) + listOf("Hold OK" to "Menu")
@@ -633,11 +692,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val bx0 = 90 * U + tw(a.hm.format(pr.start), 24f, 600) + 22 * U; val bx1 = w - 90 * U - lw - 22 * U - ew - 22 * U
             progress(c, bx0, ly - 4 * U, bx1 - bx0, pr, 8f); txt(c, e, bx1 + 22 * U, ly, ew + 4 * U, 24f, SEC, 600); live(c, w - 90 * U - lw, ly, 18f)
         }
-        if (tiles && pi) {   // from the player only: Program Info (subI -2) and TV Guide (subI -1) come first
-            for ((k, t) in listOf(Triple("info", "Program", "Info"), Triple("grid", "TV", "Guide")).withIndex()) {
-                val sel = subI == k - 2 && !subOpen; val x = px0 + k * pitch
+        val pinned = a.pip.ch
+        if (tiles && pi) {   // from the player only: Program Info (subI -3), TV Guide (-2) and Pin (-1) come first
+            for ((k, t) in listOf(Triple("info", "Program", "Info"), Triple("grid", "TV", "Guide"), Triple("pin", if (pinned == null) "Pin" else "Pinned", pinned?.name ?: "Channel")).withIndex()) {
+                val sel = subI == k - 3 && !subOpen; val x = px0 + k * pitch; if (T.fx) a.snow.card(x + matOx, ty0, tw0, th0, FR)
                 lift(c, sel, x, ty0, tw0, th0, 1.06f) {
-                    rr(c, x, ty0, tw0, th0, 14 * U, if (sel) WHITE else 0x1FFFFFFF)
+                    rr(c, x, ty0, tw0, th0, FR, if (sel) FOC else 0x1FFFFFFF)
                     val col = if (sel) ONF else WHITE
                     icon(c, t.first, x + tw0 / 2, ty0 + 29 * U, 34 * U, col)
                     txt(c, t.second, x + tw0 / 2, ty0 + 66 * U, tw0 - 16 * U, 26f, col, 700, Paint.Align.CENTER)
@@ -646,10 +706,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
         }
         if (tiles) for (i in 0..3) {
-            val (opts, cs) = a.subOpts(i); val x = px0 + (if (pi) i + 2 else i) * pitch; val sel = i == subI && !subOpen
+            val (opts, cs) = a.subOpts(i); val x = px0 + (if (pi) i + 3 else i) * pitch; val sel = i == subI && !subOpen
             val one = opts.size <= 1; val on = sel && !one   // nothing to choose: dimmed like a greyed-out Settings row, and no white focus
+            if (T.fx) a.snow.card(x + matOx, ty0, tw0, th0, FR)
             lift(c, sel, x, ty0, tw0, th0, 1.06f) {
-                rr(c, x, ty0, tw0, th0, 14 * U, if (on) WHITE else if (sel) 0x3DFFFFFF else if (i == subI) SELBG else 0x1FFFFFFF)
+                rr(c, x, ty0, tw0, th0, FR, if (on) FOC else if (sel) 0x3DFFFFFF else if (i == subI) SELBG else 0x1FFFFFFF)
                 val col = if (on) ONF else if (one && !sel) 0x66FFFFFF else WHITE
                 icon(c, ics[i], x + tw0 / 2, ty0 + 29 * U, 34 * U, col)
                 txt(c, opts.getOrElse(cs) { "" }, x + tw0 / 2, ty0 + 66 * U, tw0 - 16 * U, 26f, col, 700, Paint.Align.CENTER)
@@ -668,7 +729,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                     val k = if (wheel) oj + (2 - j) * dir else if (dir > 0) n - 1 - j else j   // UP moves to the row above, as in the wheel
                     if (k < 0 || k >= n) continue
                     val f = k == oj; val ry = qy + 90 * U + j * 66 * U
-                    if (f) rr(c, qx + 16 * U, ry, qw - 32 * U, 60 * U, 14 * U, WHITE)
+                    if (f) rr(c, qx + 16 * U, ry, qw - 32 * U, 60 * U, FR, FOC)
                     val col = if (f) ONF else if (wheel) withAlpha(-1, alphaJ[j]) else WHITE
                     txt(c, opts[k], qx + 38 * U, ry + 30 * U, qw - 120 * U, if (f) 36f else 29f, col, if (f) 700 else 600)
                     if (k == cs) icon(c, "check", qx + qw - 54 * U, ry + 30 * U, 26 * U, col)
@@ -679,11 +740,28 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 }
             }
         }
+        if (tiles && pi && subOpen && subI == -1) {   // the pinned channel's list above the Pin tile
+            val tcx = px0 + 2 * pitch + tw0 / 2; val qw = 420 * U; val qh = (24 + 3 * 82) * U; val qx = tcx - qw / 2; val qy = ty0 - qh - 34 * U
+            matCardDown(c, qx, qy, qw, qh, tcx)
+            val cn = listOf("Top Right", "Bottom Right", "Bottom Left", "Top Left")[a.pip.corner]
+            for ((j, t) in listOf("Swap", "Corner", "Unpin").withIndex()) {
+                val f = j == oj; val ry = qy + 12 * U + j * 82 * U; val col = if (f) ONF else WHITE
+                if (f) rr(c, qx + 12 * U, ry, qw - 24 * U, 72 * U, FR, FOC)
+                txt(c, t, qx + 36 * U, ry + 36 * U, 160 * U, 29f, col, if (f) 700 else 600)
+                if (j == 1) {   // where it is now: the name and a small screen with the picture's corner filled
+                    val ix = qx + qw - 36 * U - 46 * U; val iy = ry + 21 * U
+                    txt(c, cn, ix - 14 * U, ry + 36 * U, 190 * U, 21f, if (f) ONF2 else SEC, 600, Paint.Align.RIGHT)
+                    p.style = Paint.Style.STROKE; p.strokeWidth = 3 * U; p.color = col; c.drawRoundRect(RectF(ix, iy, ix + 46 * U, iy + 30 * U), 6 * U, 6 * U, p); p.style = Paint.Style.FILL
+                    val k = a.pip.corner; val dx = ix + (if (k <= 1) 27 else 6) * U; val dy = iy + (if (k == 0 || k == 3) 6 else 15) * U
+                    rr(c, dx, dy, 13 * U, 9 * U, 2 * U, col)
+                }
+            }
+        }
     }
 
     // seasonal icons are painted PNGs (res/drawable-nodpi/se_<id>.png, made from LiteTV assets/Seasonal deco); each image has
     // 14% padding around the icon box so shadows and sparkles fit, and the slant is already in the art
-    private val DECO_RES = mapOf(1 to R.drawable.se_1, 2 to R.drawable.se_2, 3 to R.drawable.se_3, 4 to R.drawable.se_4, 5 to R.drawable.se_5, 6 to R.drawable.se_6, 7 to R.drawable.se_7, 8 to R.drawable.se_8, 9 to R.drawable.se_9, 10 to R.drawable.se_10, 11 to R.drawable.se_11, 12 to R.drawable.se_12, 13 to R.drawable.se_13, 14 to R.drawable.se_14, 15 to R.drawable.se_15, 16 to R.drawable.se_16, 17 to R.drawable.se_17, 18 to R.drawable.se_18, 19 to R.drawable.se_19, 21 to R.drawable.se_21, 22 to R.drawable.se_22, 23 to R.drawable.se_23, 24 to R.drawable.se_24)
+    private val DECO_RES = mapOf(1 to R.drawable.se_1, 20 to R.drawable.se_20, 2 to R.drawable.se_2, 3 to R.drawable.se_3, 4 to R.drawable.se_4, 5 to R.drawable.se_5, 6 to R.drawable.se_6, 7 to R.drawable.se_7, 8 to R.drawable.se_8, 9 to R.drawable.se_9, 10 to R.drawable.se_10, 11 to R.drawable.se_11, 12 to R.drawable.se_12, 13 to R.drawable.se_13, 14 to R.drawable.se_14, 15 to R.drawable.se_15, 16 to R.drawable.se_16, 17 to R.drawable.se_17, 18 to R.drawable.se_18, 19 to R.drawable.se_19, 21 to R.drawable.se_21, 22 to R.drawable.se_22, 23 to R.drawable.se_23, 24 to R.drawable.se_24)
     private val decoBmp = HashMap<Int, Bitmap?>()
     private val decoPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     fun deco(c: Canvas, id: Int, x: Float, y: Float, s: Float) {
@@ -718,10 +796,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val listTop = 34 * U + 76 * U + 30 * U
         // rows shrink to keep the card on screen (8 items with Now Playing ran off the bottom at 90 px)
         val fixed = listTop + 29 * U + (if (ch != null) 22 * U + npH else 0f) + 20 * U
-        val pitch = minOf(90 * U, (h - 2 * M - fixed) / (items.size - 1 + 80f / 90f)); val ih = pitch * 80f / 90f
+        val pitch = minOf(90 * U, (h - PT - M - fixed) / (items.size - 1 + 80f / 90f)); val ih = pitch * 80f / 90f
         val ch0 = listTop + (items.size - 1) * pitch + 14 * U + U + 14 * U + ih + (if (ch != null) 22 * U + npH else 0f) + 20 * U
-        val x = M; val y = ((h - ch0) / 2).coerceAtLeast(M)
-        glass(c, x, y, cw, ch0)
+        val x = M; val y = PT
+        glass(c, x, y, cw, ch0); a.snow.garland(x, y, cw)   // Christmas: a garland on the menu (Snow draws it)
         val ms = 76 * U; drawMark(c, x + 40 * U, y + 34 * U, ms)
         val lx = x + 40 * U + ms + 22 * U; val ly = y + 34 * U + ms / 2
         txt(c, "Lite", lx, ly, 200 * U, 44f, WHITE, 700); txt(c, "TV", lx + tw("Lite", 44f, 700), ly, 200 * U, 44f, 0, 700, accent = true)
@@ -732,7 +810,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         items.forEachIndexed { i, it ->
             val top = if (i == items.lastIndex) sepY + 15 * U else y + listTop + i * pitch; val on = i == menuSel
             lift(c, on, bx, top, bw, ih, 1.04f) {
-                if (on) rr(c, bx, top, bw, ih, 14 * U, WHITE)
+                if (on) rr(c, bx, top, bw, ih, FR, FOC)
                 val col = if (on) ONF else WHITE
                 icon(c, it.first, bx + 43 * U, top + ih / 2, 34 * U, col)
                 stxt(c, it.second, bx + 86 * U, top + ih / 2, bw - 110 * U, 34f, col, if (on) 600 else 500, on)
@@ -750,39 +828,53 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (pr != null) progress(c, tx, ny + 122 * U, tmw, pr)
     }
 
-    // ---------- settings: one line per setting; the selected row's explanation sits in the footer ----------
-    fun drawSettings(c: Canvas, w: Float, h: Float) {
-        val pw = 680 * U; val t0 = 128 * U; val foot = h - M - 20 * U; val ih = 80 * U; val sh = 60 * U
-        glass(c, 0f, M, pw, h - 2 * M)
-        txt(c, "Settings", 40 * U, 72 * U, pw - 80 * U, 44f, WHITE, 700)
+    // the round ‹ before a page title: not selectable, it shows that BACK goes up a level (like Apple's back button)
+    // a page's title row, the same on every page: the round ‹ in the rows' icon column, the title on the labels' line, 72 px below the card top
+    fun head(c: Canvas, x: Float, top: Float, title: String, maxW: Float, back: Boolean = true) {
+        if (back) backMark(c, x + 36 * U, top + 72 * U, 56 * U, bkF)
+        txt(c, title, x + (if (back) 110 else 40) * U, top + 72 * U, maxW, 44f, WHITE, 700)
+    }
+    var bkF = false   // the page's back button has the focus (UP from the first row; OK on it = BACK). About has nothing else, so it starts there
+    fun backMark(c: Canvas, x: Float, cy: Float, d: Float = 56 * U, on: Boolean = false) {
+        val r = if (on) d / 2 * 1.08f else d / 2   // focused (Settings): white and a little bigger, like every focused item
+        p.shader = null; if (on && T.party) sparkle(c) { c.drawCircle(x + d / 2, cy, r, it) } else { p.color = if (on) FOC else 0x24FFFFFF; c.drawCircle(x + d / 2, cy, r, p) }; icon(c, "back", x + d / 2 - 2 * U, cy, d * 0.5f, if (on) ONF else WHITE)
+    }
+    // ---------- settings: the categories, or one category's rows; the selected row shows what it does under its name ----------
+    class SRow(val icon: String, val label: String, val value: String, val desc: String, val enabled: Boolean, val opens: Boolean)
+    fun settingRows(): List<SRow> {
+        if (setCat < 0) return SET_CATS.mapIndexed { k, s -> SRow(s.icon, s.name, a.catValue(k), s.desc, true, true) }
         val items = a.settingsItems()
-        // the selected row grows to show what it does under its name (no footer); the text shares the row with the value on the right
-        val sv = items.getOrNull(setSel)?.second ?: ""; val dsz = 24f
+        return SET_CATS[setCat].rows.map { i -> SRow(SETTING_ICONS.getOrElse(i) { "info" }, items[i].first, items[i].second, a.settingDesc(i), a.settingEnabled(i), i == 0 || i == 13 || i == 14 || i == 16 || i == 17) }
+    }
+    fun drawSettings(c: Canvas, w: Float, h: Float) {
+        val pw = 680 * U; val t0 = PT + 136 * U; val foot = h - M - 20 * U; val ih = 80 * U; val bx = 20 * U; val bw = pw - 40 * U
+        val rows = settingRows(); setSel = setSel.coerceIn(0, rows.lastIndex); val sel = if (bkF) -1 else setSel   // -1: the back button has the focus
+        val sr = rows[setSel]; val dsz = 24f
         tp.textSize = tsz(dsz); tp.typeface = REG
-        val dw = (pw - 150 * U - (if (sv.isNotEmpty()) tw(sv + "  ›", 29f, 600) + 30 * U else 0f)).toInt()
-        val dl = fitText(a.settingDesc(setSel), maxOf(1, dw), tsz(dsz) * 1.15f * 3.2f, 1.15f)
+        val dw = (pw - 150 * U - (if (sr.value.isNotEmpty()) tw(sr.value + "  ›", 29f, 600) + 30 * U else 0f)).toInt()
+        val dl = fitText(sr.desc, maxOf(1, dw), tsz(dsz) * 1.15f * 3.2f, 1.15f)
         val dh = dl.height + 16 * U
-        val ys = FloatArray(items.size); var yy = 0f   // top of every row inside the list (a section heading sits just above its first row)
-        for (i in items.indices) { if (a.settingSection(i) != null) yy += sh; ys[i] = yy; yy += ih + (if (i == setSel) dh else 0f) }
-        val scroll = maxOf(0f, ys[setSel.coerceIn(0, items.lastIndex)] + ih + dh + 20 * U - (foot - t0))
-        c.save(); c.clipRect(0f, t0, pw - U, foot); c.translate(0f, t0 - scroll)
-        items.forEachIndexed { i, row ->
-            val y = ys[i]
-            a.settingSection(i)?.let { sec -> hdr(c, sec, 40 * U, y - 22 * U, pw - 80 * U) }
-            val on = i == setSel; val en = a.settingEnabled(i)   // rows that do not apply right now are dimmed
+        val ys = FloatArray(rows.size); var yy = 0f
+        for (i in rows.indices) { ys[i] = yy; yy += ih + (if (i == sel) dh else 0f) }
+        // the card is as tall as its rows (six categories in a full-height card looked empty)
+        glass(c, 0f, PT, pw, minOf(h - PT - M, t0 + yy + 24 * U - PT))
+        head(c, 0f, PT, if (setCat < 0) "Settings" else SET_CATS[setCat].name, pw - 150 * U)
+        val scroll = maxOf(0f, ys[setSel] + ih + dh + 20 * U - (foot - t0))
+        c.save(); c.clipRect(0f, t0 - 12 * U, pw - U, foot); c.translate(0f, t0 - scroll)
+        rows.forEachIndexed { i, r ->
+            val y = ys[i]; val on = i == sel; val en = r.enabled   // rows that do not apply right now are dimmed
             val rh = ih + (if (on) dh else 0f)
-            lift(c, on, 12 * U, y + 3 * U, pw - 24 * U, rh - 6 * U, 1.025f) {
+            lift(c, on, bx, y + 3 * U, bw, rh - 6 * U, 1.025f) {
                 if (on) {
-                    rr(c, 12 * U, y + 3 * U, pw - 24 * U, rh - 6 * U, 14 * U, WHITE)
+                    rr(c, bx, y + 3 * U, bw, rh - 6 * U, FR, FOC)
                     tp.textSize = tsz(dsz); tp.typeface = REG; tp.color = withAlpha(ONF, 0xA8); tp.shader = null; tp.textAlign = Paint.Align.LEFT
                     c.save(); c.translate(110 * U, y + ih - 14 * U); dl.draw(c); c.restore()
                 }
                 val col = if (on) ONF else if (en) WHITE else 0x66FFFFFF
                 rr(c, 40 * U, y + ih / 2 - 24 * U, 48 * U, 48 * U, 12 * U, if (on) 0x14000000 else 0x1AFFFFFF)
-                icon(c, SETTING_ICONS.getOrElse(i) { "info" }, 64 * U, y + ih / 2, 28 * U, col)
-                txt(c, row.first, 110 * U, y + ih / 2, pw * 0.5f, 31f, col, if (on) 600 else 500)
-                val open = i == 0 || i == 13 || i == 14 || i == 16 || i == 17
-                if (row.second.isNotEmpty() || open) txt(c, row.second + (if (open) "  ›" else ""), pw - 40 * U, y + ih / 2, pw * 0.42f, 29f,
+                icon(c, r.icon, 64 * U, y + ih / 2, 28 * U, col)
+                txt(c, r.label, 110 * U, y + ih / 2, pw * 0.5f, 31f, col, if (on) 600 else 500)
+                if (r.value.isNotEmpty() || r.opens) txt(c, r.value + (if (r.opens) "  ›" else ""), pw - 40 * U, y + ih / 2, pw * 0.42f, 29f,
                     if (on) ONF else if (en) SEC else 0x55FFFFFF, if (on) 600 else 400, Paint.Align.RIGHT)
             }
         }
@@ -792,12 +884,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     private val aboutQr by lazy { listOf(a.qr("https://github.com/hertn/LiteTV", 300), a.qr("https://ko-fi.com/hertn", 300)) }
     fun drawAbout(c: Canvas, w: Float, h: Float) {
         val pw = 680 * U; val x = 40 * U; val iw = pw - 80 * U
-        glass(c, 0f, M, pw, h - 2 * M)
-        val ms = 120 * U; drawMark(c, x, M + 36 * U, ms)
-        val lx = x + ms + 26 * U; val ly = M + 36 * U + ms / 2
+        glass(c, 0f, PT, pw, h - PT - M)
+        val ms = 96 * U; backMark(c, 36 * U, PT + 72 * U, 56 * U, true); val mx = 110 * U; drawMark(c, mx, PT + 72 * U - ms / 2, ms)
+        val lx = mx + ms + 24 * U; val ly = PT + 72 * U + 6 * U
         txt(c, "Lite", lx, ly - 18 * U, 300 * U, 52f, WHITE, 700); txt(c, "TV", lx + tw("Lite", 52f, 700), ly - 18 * U, 200 * U, 52f, 0, 700, accent = true)
         txt(c, "Version " + a.verLabel.removePrefix("v"), lx, ly + 28 * U, iw - ms, 26f, SEC)
-        var y = M + 36 * U + ms + 40 * U
+        var y = PT + 72 * U + 64 * U
         para(c, "A lightweight live TV app for Android TV. Add your own M3U playlists and TV guides; LiteTV doesn't include any channels.", x, y, iw, 110 * U, 27f, WHITE); y += 110 * U
         // facts list, label left and value right, like Apple TV's Settings > General > About
         val facts = listOf("Made By" to "hertn", "Price" to "Free, no ads", "Licence" to "Open source (MIT)",
@@ -829,7 +921,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             r.add(KRow(k.name, chips.ifEmpty { listOf("—") }, k, k.desc, if (i == 0) "Watching TV" else null))
         }
         r.add(KRow("Channel Number", listOf("0–9"), null, "Type a channel number to jump to it. 0 on its own goes back to the previous channel."))
-        r.add(KRow("Exit App", listOf("Hold Back"), null, "Hold Back for a second to close LiteTV completely."))
+        r.add(KRow("Exit App", listOf("Hold Back"), null, "Hold Back for a second to close LiteTV completely. While a channel is pinned, the first hold unpins it instead."))
         r.add(KRow("Move / Choose", listOf("▲▼◀▶", "OK"), null, "The arrows move and OK chooses, in every list and menu.", "In Menus and Lists"))
         r.add(KRow("Go Back", listOf("Back"), null, "Back closes the screen you are on."))
         r.add(KRow("Reset All Buttons", emptyList(), null, "Puts every button back to how it came.", "", true))
@@ -841,19 +933,18 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         txt(c, s, x + cw0 / 2, cy, cw0, 22f, if (on) ONF else WHITE, 700, Paint.Align.CENTER); return x
     }
     fun drawKeys(c: Canvas, w: Float, h: Float) {
-        val pw = w * 0.46f; val t0 = 128 * U; val bot = h - M - 20 * U; val ih = 76 * U; val sh = 58 * U
+        val pw = w * 0.46f; val t0 = PT + 136 * U; val bot = h - M - 20 * U; val ih = 76 * U; val sh = 58 * U
         val rows = keyRows(); rbSel = rbSel.coerceIn(0, rows.lastIndex); val cur = rows[rbSel]
-        glass(c, 0f, M, pw, h - 2 * M)
-        txt(c, "Remote Buttons", 40 * U, 72 * U, pw - 80 * U, 44f, WHITE, 700)
+        glass(c, 0f, PT, pw, h - PT - M); head(c, 0f, PT, "Remote Buttons", pw - 150 * U)
         val ys = FloatArray(rows.size); var yy = 0f
         rows.forEachIndexed { i, r -> if (r.sec != null) yy += if (r.sec.isEmpty()) 20 * U else sh; ys[i] = yy; yy += ih }
         val scroll = maxOf(0f, ys[rbSel] + ih + 20 * U - (bot - t0))
         c.save(); c.clipRect(0f, t0, pw - U, bot); c.translate(0f, t0 - scroll)
         rows.forEachIndexed { i, r ->
-            val y = ys[i]; val on = i == rbSel && rbSub == 0; val mark = i == rbSel
+            val y = ys[i]; val on = i == rbSel && rbSub == 0 && !bkF; val mark = i == rbSel && !bkF
             if (!r.sec.isNullOrEmpty()) hdr(c, r.sec.uppercase(), 40 * U, y - 22 * U, pw - 80 * U)
-            lift(c, on, 12 * U, y + 3 * U, pw - 24 * U, ih - 6 * U, 1.025f) {
-                if (mark) rr(c, 12 * U, y + 3 * U, pw - 24 * U, ih - 6 * U, 14 * U, if (on) WHITE else SELBG)
+            lift(c, on, 20 * U, y + 3 * U, pw - 40 * U, ih - 6 * U, 1.025f) {
+                if (mark) rr(c, 20 * U, y + 3 * U, pw - 40 * U, ih - 6 * U, FR, if (on) FOC else SELBG)
                 val col = if (on) ONF else WHITE
                 var xr = pw - 36 * U
                 for (ch in r.chips.reversed()) xr = chip(c, ch, xr, y + ih / 2, on) - 10 * U
@@ -862,7 +953,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         c.restore()
         // right: what the selected row does; after OK a small menu, then the wait for a button
-        val cx = pw + GAP; val cwid = minOf(680 * U, w - cx - M); val cy = M
+        val cx = pw + GAP; val cwid = minOf(680 * U, w - cx - M); val cy = PT
         if (cwid < 300 * U) return
         when (rbSub) {
             0 -> {
@@ -880,7 +971,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 opts.forEachIndexed { j, (l, v) ->
                     val oy = cy + 84 * U + j * 82 * U; val on = j == rbOpt
                     lift(c, on, cx + 14 * U, oy, cwid - 28 * U, 74 * U, 1.025f) {
-                        if (on) rr(c, cx + 14 * U, oy, cwid - 28 * U, 74 * U, 14 * U, WHITE)
+                        if (on) rr(c, cx + 14 * U, oy, cwid - 28 * U, 74 * U, FR, FOC)
                         txt(c, l, cx + 36 * U, oy + 37 * U, cwid * 0.5f, 30f, if (on) ONF else WHITE, if (on) 600 else 500)
                         if (v.isNotEmpty()) txt(c, v, cx + cwid - 36 * U, oy + 37 * U, cwid * 0.45f, 24f, if (on) ONF2 else SEC, 400, Paint.Align.RIGHT)
                     }
@@ -926,7 +1017,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val i = top + k; val lab = items.getOrNull(i) ?: break; val y = rh * (k + 1); val on = i == selI
             val bx = x + ins; val bw = pw - 2 * ins; val bh = rh - 12 * U
             lift(c, on && focused, bx, y + 6 * U, bw, bh, 1.03f) {
-                if (on) rr(c, bx, y + 6 * U, bw, bh, 14 * U, if (focused) WHITE else SELBG)
+                if (on) rr(c, bx, y + 6 * U, bw, bh, FR, if (focused) FOC else SELBG)
                 val col = if (on && focused) ONF else WHITE
                 val pre = if (grab == true && on) "●  " else ""
                 stxt(c, pre + lab, bx + 26 * U, y + rh / 2, bw - 90 * U, 31f, col, if (on) 600 else 500, on && focused)
@@ -1018,10 +1109,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 val x1 = maxOf(X(p.start), tx0); val x2 = minOf(X(p.stop), tx0 + tw0); if (x2 - x1 < 10 * U) continue
                 val on = rowSel && p == pr; val air = p.start <= now && p.stop > now; val cw = x2 - x1 - 8 * U
                 lift(c, on, x1, y + 6 * U, cw, rh - 12 * U, 1.04f) {
-                    rr(c, x1, y + 6 * U, cw, rh - 12 * U, 12 * U, if (on) (if (air) 0xB3FFFFFF.toInt() else WHITE) else if (air) 0x24FFFFFF else 0x0FFFFFFF)
+                    rr(c, x1, y + 6 * U, cw, rh - 12 * U, 12 * U, if (on) (if (air) withAlpha(FOC, 0xB3) else FOC) else if (air) 0x24FFFFFF else 0x0FFFFFFF)
                     if (air) {   // the part already played is lighter (the selected show: full white), so each live show shows how far in it is
                         c.save(); mPath.reset(); mPath.addRoundRect(RectF(x1, y + 6 * U, x1 + cw, y + rh - 6 * U), 12 * U, 12 * U, Path.Direction.CW); c.clipPath(mPath)
-                        fill(c, x1, y + 6 * U, minOf(X(now), x1 + cw) - x1, rh - 12 * U, if (on) WHITE else 0x1FFFFFFF); c.restore()
+                        fill(c, x1, y + 6 * U, minOf(X(now), x1 + cw) - x1, rh - 12 * U, if (on) FOC else 0x1FFFFFFF); c.restore()
                     }
                     if (cw > 60 * U) {
                         val col = if (on) ONF else if (p.stop <= now) SEC else WHITE
@@ -1037,7 +1128,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         // now line
         if (now >= gW0 && now < gW0 + G_SPAN) {
             val nx = X(now); fill(c, nx - 1.5f * U, gy + 84 * U, 3 * U, rows * rh + 8 * U, 0xD9FFFFFF.toInt())
-            rr(c, nx - 38 * U, gy + 62 * U, 76 * U, 30 * U, 15 * U, WHITE); txt(c, a.hm.format(now), nx, gy + 77 * U, 70 * U, 19f, ONF, 700, Paint.Align.CENTER)
+            rr(c, nx - 38 * U, gy + 62 * U, 76 * U, 30 * U, 15 * U, WHITE); txt(c, a.hm.format(now), nx, gy + 77 * U, 70 * U, 19f, 0xFF1C1C1E.toInt(), 700, Paint.Align.CENTER)
         }
         postInvalidateDelayed(30_000L)   // the now line moves
     }
@@ -1058,18 +1149,18 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val gap = 10 * U; val pw = 157 * U; val ph = 120 * U; val nv = minOf(7, ds.size); val rh = 124 * U
         val cw = minOf(w - 2 * M, maxOf(900 * U, nv * (pw + gap) - gap + 80 * U)); val x = M; val ix = x + 40 * U; val iw = cw - 80 * U
         val top = 112 * U + ph + 34 * U + 30 * U; val bottom = 20 * U + 80 * U
-        val fit = maxOf(1, ((h - 2 * M - top - bottom) / rh).toInt()); val nr = minOf(fit, maxOf(1, day.size))
-        val ch0 = top + (if (day.isEmpty()) 150 * U else nr * rh) + bottom; val y0 = ((h - ch0) / 2).coerceAtLeast(M)
+        val fit = maxOf(1, ((h - PT - M - top - bottom) / rh).toInt()); val nr = minOf(fit, maxOf(1, day.size))
+        val ch0 = top + (if (day.isEmpty()) 150 * U else nr * rh) + bottom; val y0 = PT
         glass(c, x, y0, cw, ch0)
-        txt(c, "Reminders", ix, y0 + 62 * U, iw, 44f, WHITE, 700)
-        txt(c, "${rs.size} set", ix + iw, y0 + 66 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
+        head(c, x, y0, "Reminders", iw - 300 * U)
+        txt(c, "${rs.size} set", ix + iw, y0 + 76 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
         // day strip: only days that have reminders; weekday, date, and a dot per reminder
         val sy = y0 + 112 * U; val f0 = maxOf(0, di - 6)
         ds.forEachIndexed { i, d ->
             if (i < f0 || i > f0 + 6) return@forEachIndexed
             val px = ix + (i - f0) * (pw + gap); val on = i == di; val cnt = rs.count { dayOf(it.prog.start) == d }
-            rr(c, px, sy, pw, ph, 16 * U, if (on) SELBG else 0x14FFFFFF)
-            if (on) outline(c, px, sy, pw, ph, 16 * U)
+            rr(c, px, sy, pw, ph, FR, if (on) SELBG else 0x14FFFFFF)
+            if (on) outline(c, px, sy, pw, ph, FR)
             val dn = ((d - dayOf(now) + 3_600_000L) / 86_400_000L).toInt()   // days from today (+1 h: DST)
             val lb = if (dn == 0) "Today" else if (dn == 1) "Tomorrow" else wd.format(d)
             txt(c, lb, px + pw / 2, sy + 30 * U, pw - 12 * U, 20f, if (on) WHITE else SEC, 600, Paint.Align.CENTER)
@@ -1088,9 +1179,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         val sel0 = remSel.coerceIn(0, maxOf(0, day.lastIndex)); val first = maxOf(0, sel0 - fit + 1)
         for (j in first until minOf(day.size, first + fit)) {
-            val it = day[j]; val y = ry0 + 30 * U + (j - first) * rh; val on = j == sel0; val pr = it.prog
+            val it = day[j]; val y = ry0 + 30 * U + (j - first) * rh; val on = j == sel0 && !bkF; val pr = it.prog
             lift(c, on, ix - 16 * U, y, iw + 32 * U, rh - 12 * U, 1.025f) {
-                if (on) rr(c, ix - 16 * U, y, iw + 32 * U, rh - 12 * U, 16 * U, WHITE)
+                if (on) rr(c, ix - 16 * U, y, iw + 32 * U, rh - 12 * U, FR, FOC)
                 val col = if (on) ONF else WHITE; val col2 = if (on) ONF2 else SEC; val cy = y + (rh - 12 * U) / 2
                 txt(c, a.hm.format(pr.start), ix + 4 * U, cy, 130 * U, 36f, col, 700)
                 val lx = ix + 140 * U
@@ -1113,11 +1204,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val hs = a.hiddenList(); val cols = maxOf(1, minOf(HID_COLS, hs.size)); val tw0 = 196 * U; val th0 = 110 * U; val gx = 18 * U; val rh = th0 + 64 * U
         val cw = minOf(w - 2 * M, maxOf(700 * U, cols * (tw0 + gx) - gx + 80 * U)); val x = M; val ix = x + 40 * U; val iw = cw - 80 * U
         val top = 120 * U; val bottom = 100 * U; val nrow = (hs.size + HID_COLS - 1) / HID_COLS
-        val fit = maxOf(1, ((h - 2 * M - top - bottom) / rh).toInt()); val vr = minOf(fit, maxOf(1, nrow))
-        val ch0 = top + (if (hs.isEmpty()) 130 * U else vr * rh) + bottom; val y0 = ((h - ch0) / 2).coerceAtLeast(M)
+        val fit = maxOf(1, ((h - PT - M - top - bottom) / rh).toInt()); val vr = minOf(fit, maxOf(1, nrow))
+        val ch0 = top + (if (hs.isEmpty()) 130 * U else vr * rh) + bottom; val y0 = PT
         glass(c, x, y0, cw, ch0)
-        txt(c, "Hidden Channels", ix, y0 + 62 * U, iw, 44f, WHITE, 700)
-        txt(c, "${hs.size} hidden", ix + iw, y0 + 66 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
+        head(c, x, y0, "Hidden Channels", iw - 300 * U)
+        txt(c, "${hs.size} hidden", ix + iw, y0 + 76 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
         if (hs.isEmpty()) {
             txt(c, "No hidden channels", ix, y0 + top + 30 * U, iw, 32f, SEC, 600)
             txt(c, "Hide one from the channel list with its Hide Channel button", ix, y0 + top + 74 * U, iw, 24f, TER)
@@ -1125,7 +1216,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         val sel0 = hidSel.coerceIn(0, hs.lastIndex); val fr = maxOf(0, sel0 / HID_COLS - fit + 1)
         for (j in fr * HID_COLS until minOf(hs.size, (fr + vr) * HID_COLS)) {
-            val ch = hs[j]; val tx = ix + (j % HID_COLS) * (tw0 + gx); val ty = y0 + top + (j / HID_COLS - fr) * rh; val on = j == sel0
+            val ch = hs[j]; val tx = ix + (j % HID_COLS) * (tw0 + gx); val ty = y0 + top + (j / HID_COLS - fr) * rh; val on = j == sel0 && !bkF
             lift(c, on, tx, ty, tw0, th0, 1.08f) { tile(c, ch, tx, ty, tw0, th0, if (on) SELBG else FILL); if (on) outline(c, tx, ty, tw0, th0, 10 * U) }   // no white focus: most logos are white
             txt(c, "${ch.num}: ${ch.name}", tx + tw0 / 2, ty + th0 + 30 * U, tw0 + gx - 6 * U, 22f, if (on) WHITE else SEC, if (on) 600 else 400, Paint.Align.CENTER)
         }
@@ -1137,17 +1228,17 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                      empty: String, notes: List<String>, hints: List<Pair<String, String>>) {
         val x = M; val ix = x + 40 * U; val iw = pw - 80 * U; val rh = 80 * U; val top = 112 * U
         val bottom = notes.size * 40 * U + (if (items.isEmpty()) 0f else 100 * U) + (if (notes.isEmpty()) 0f else 20 * U)
-        val fit = maxOf(1, ((h - 2 * M - top - bottom) / rh).toInt()); val nr = minOf(fit, maxOf(1, items.size))
-        val ch0 = top + (if (items.isEmpty()) 110 * U else nr * rh) + bottom; val y0 = ((h - ch0) / 2).coerceAtLeast(M)
+        val fit = maxOf(1, ((h - PT - M - top - bottom) / rh).toInt()); val nr = minOf(fit, maxOf(1, items.size))
+        val ch0 = top + (if (items.isEmpty()) 110 * U else nr * rh) + bottom; val y0 = PT
         glass(c, x, y0, pw, ch0)
-        txt(c, title, ix, y0 + 62 * U, iw, 44f, WHITE, 700)
-        txt(c, count, ix + iw, y0 + 66 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
+        head(c, x, y0, title, iw - 300 * U)   // both list cards open from Settings
+        txt(c, count, ix + iw, y0 + 76 * U, 300 * U, 24f, SEC, 500, Paint.Align.RIGHT)
         if (items.isEmpty()) txt(c, empty, ix, y0 + top + 30 * U, iw, 32f, SEC, 600)
         val sel0 = selI.coerceIn(0, maxOf(0, items.lastIndex)); val first = maxOf(0, sel0 - fit + 1)
         for (j in first until minOf(items.size, first + fit)) {
-            val y = y0 + top + (j - first) * rh; val on = j == sel0; val bx = x + 14 * U; val bw = pw - 28 * U; val bh = rh - 12 * U
+            val y = y0 + top + (j - first) * rh; val on = j == sel0 && !bkF; val bx = x + 14 * U; val bw = pw - 28 * U; val bh = rh - 12 * U
             lift(c, on, bx, y, bw, bh, 1.025f) {
-                if (on) rr(c, bx, y, bw, bh, 14 * U, WHITE)
+                if (on) rr(c, bx, y, bw, bh, FR, FOC)
                 stxt(c, (if (grab && on) "●  " else "") + items[j], ix, y + bh / 2, iw, 31f, if (on) ONF else WHITE, if (on) 600 else 500, on)
             }
         }
@@ -1174,14 +1265,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun drawThemes(c: Canvas, w: Float, h: Float) {
         val pw = w * 0.24f
         // rows shrink a little when the list would run into the key hints (11 themes did: New Year's highlight covered them)
-        val rh = minOf(78 * U, (h - M - 36 * U - 30 * U - (M - 4 * U) - 2 * 58 * U) / THEMES.size)
-        glass(c, 0f, M, pw, h - 2 * M)
-        var y = M - 4 * U
+        val y0 = PT + 120 * U; val rh = minOf(78 * U, (h - M - 20 * U - y0 - 58 * U) / THEMES.size)
+        glass(c, 0f, PT, pw, h - PT - M); head(c, 0f, PT, "Themes", pw - 150 * U)
+        var y = y0
         THEMES.forEachIndexed { i, t ->
-            if (i == 0 || i == FIRST_SEASONAL) { hdr(c, if (i == 0) "Themes" else "Seasonal", 40 * U, y + 33 * U, pw - 60 * U); y += 58 * U }
-            val on = i == themeSel; val bx = 12 * U; val bw = pw - 24 * U
+            if (i == FIRST_SEASONAL) { hdr(c, "Seasonal", 40 * U, y + 33 * U, pw - 100 * U); y += 58 * U }
+            val on = i == themeSel && !bkF; val bx = 20 * U; val bw = pw - 40 * U
             lift(c, on, bx, y + 4 * U, bw, rh - 8 * U, 1.03f) {
-                if (on) rr(c, bx, y + 4 * U, bw, rh - 8 * U, 14 * U, WHITE)
+                if (on) rr(c, bx, y + 4 * U, bw, rh - 8 * U, FR, FOC)
                 val cy = y + rh / 2; val dx = bx + 41 * U
                 if (t.seasonal) {   // half menu colour, half accent
                     c.save(); val cp = Path(); cp.addCircle(dx, cy, 15 * U, Path.Direction.CW); c.clipPath(cp)
@@ -1195,9 +1286,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
             y += rh
         }
-        keyHint(c, listOf("OK" to "use"), 40 * U, h - M - 36 * U, pw - 60 * U)
         // preview: the only places the colour appears
-        val x = pw + w * 0.04f; val pW = 760 * U; val pH = 520 * U; val py = (h - pH) / 2   // only as big as its contents, centred beside the list
+        val x = pw + w * 0.04f; val pW = 760 * U; val pH = 520 * U; val py = PT   // only as big as its contents, top in line with the list
         glass(c, x, py, pW, pH)
         hdr(c, "Where the colour shows", x + 40 * U, py + 48 * U, pW - 80 * U)
         val labels = listOf("Chosen option", "Reminders", "App name in the menu")   // the playing channel is a red dot now, not the theme colour
@@ -1264,7 +1354,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             later.forEachIndexed { i, lp ->
                 val cx = x + i * 430 * U; val cy = 812 * U; val f = infoRow == 1 && i == laterSel.coerceIn(0, later.lastIndex)
                 lift(c, f, cx, cy, 400 * U, 170 * U, 1.06f) {
-                    rr(c, cx, cy, 400 * U, 170 * U, 16 * U, if (f) WHITE else 0x14FFFFFF)
+                    rr(c, cx, cy, 400 * U, 170 * U, FR, if (f) FOC else 0x14FFFFFF)
                     txt(c, a.hm.format(lp.start), cx + 24 * U, cy + 38 * U, 200 * U, 24f, if (f) ONF2 else SEC, 600)
                     if (a.hasRem(ch, lp)) { tp.letterSpacing = 0.03f; val rw = tw("REMINDER", 20f, 700); txt(c, "REMINDER", cx + 376 * U - rw, cy + 38 * U, rw + 4 * U, 20f, if (f) ONF else 0, 700, accent = !f); tp.letterSpacing = 0f; icon(c, "bell", cx + 362 * U - rw, cy + 38 * U, 22 * U, if (f) ONF else 0, !f) }
                     para(c, lp.title, cx + 24 * U, cy + 64 * U, 352 * U, 80 * U, 28f, if (f) ONF else WHITE, 1.1f)
@@ -1301,7 +1391,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 4 -> { if (subOpen) subOpen = false else if (backMode == 0) close() else mode = backMode }
                 mode == 5 -> if (infoBack == 4) close() else { mode = infoBack; if (mode == 14) remSel = remSel.coerceAtLeast(0) }   // from the OK tiles: back to the picture, not the tiles
                 mode == 6 -> { a.setTheme(a.themeIdx, false); mode = 8 }   // back to settings, preview dropped
-                mode == 8 -> { a.settingsDone(); mode = 3 }
+                mode == 8 -> if (setCat >= 0) { setSel = setCat; setCat = -1; bkF = false } else { a.settingsDone(); mode = 3 }   // a category: back to the categories
                 mode == 9 -> { if (grpGrab) grpGrab = false else mode = 8 }   // drop the group, then back to settings
                 mode == 10 || mode == 13 -> mode = 8                        // back to settings
                 mode == 16 -> if (gBack == 0) close() else mode = gBack
@@ -1309,6 +1399,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 12 -> if (rbSub > 0) rbSub = 0 else mode = 8          // back to settings
                 else -> close()
             }
+            touch(); invalidate(); return true
+        }
+        if (bkF && mode in listOf(6, 8, 9, 10, 12, 13, 14, 15)) {
+            if (ok) { bkF = false; return onKeyDown(KeyEvent.KEYCODE_BACK, e) }
+            if (dn && mode != 13) bkF = false
             touch(); invalidate(); return true
         }
         if (mode == 12 && rbSub == 2) {   // waiting for a button: whatever comes next is added to the selected action
@@ -1364,15 +1459,21 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val n = a.menuItems().size
             when { up -> menuSel = (menuSel + n - 1) % n; dn -> menuSel = (menuSel + 1) % n; ok -> a.menuAct(menuSel) }
         } else if (mode == 4) {
-            val n = if (subI < 0) 0 else a.subOpts(subI).first.size
+            val n = if (subI == -1) 3 else if (subI < 0) 0 else a.subOpts(subI).first.size
             when {
-                up -> if (subOpen) oj = (oj + dir).coerceIn(0, maxOf(0, n - 1)) else if (backMode == 0) a.zap(dir)
-                dn -> if (subOpen) oj = (oj - dir).coerceIn(0, maxOf(0, n - 1)) else if (backMode == 0) a.zap(-dir)
-                lf -> if (quickHide && backMode == 0) open(1) else if (!subOpen) { subI = maxOf(if (backMode == 0) -2 else 0, subI - 1) } else if (subI == 3) oj = maxOf(0, oj - a.AVD_JUMP)
+                up -> if (subOpen && subI == -1) oj = maxOf(0, oj - 1) else if (subOpen) oj = (oj + dir).coerceIn(0, maxOf(0, n - 1)) else if (backMode == 0) a.zap(dir)
+                dn -> if (subOpen && subI == -1) oj = minOf(n - 1, oj + 1) else if (subOpen) oj = (oj - dir).coerceIn(0, maxOf(0, n - 1)) else if (backMode == 0) a.zap(-dir)
+                lf -> if (quickHide && backMode == 0) open(1) else if (!subOpen) { subI = maxOf(if (backMode == 0) -3 else 0, subI - 1) } else if (subI == 3) oj = maxOf(0, oj - a.AVD_JUMP)
                 rt -> if (quickHide && backMode == 0) open(2) else if (!subOpen) { subI = minOf(3, subI + 1) } else if (subI == 3) oj = minOf(n - 1, oj + a.AVD_JUMP)
-                ok -> if (quickHide) quickHide = false   // after a channel change the first OK only picks the tiles up
-                else if (subI == -2) { a.subCh()?.let { openInfo(it, a.now(it)) } }
-                else if (subI == -1) { a.subCh()?.let { openGrid(it, 0) } }   // BACK closes it: the tiles do not come back
+                ok -> if (quickHide && a.held() && backMode == 0) a.pinFull()   // the "pinned" notice: OK watches it full screen
+                else if (quickHide) quickHide = false   // after a channel change the first OK only picks the tiles up
+                else if (subI == -3) { a.subCh()?.let { openInfo(it, a.now(it)) } }
+                else if (subI == -2) { a.subCh()?.let { openGrid(it, 0) } }   // BACK closes it: the tiles do not come back
+                else if (subI == -1) {   // Pin: pins the channel playing; once pinned, a list: Swap, Corner (each OK moves it on a corner, the list stays), Unpin
+                    if (a.pip.ch == null) a.cur?.let { a.pinCh(it) }
+                    else if (!subOpen) { oj = 0; subOpen = true }
+                    else when (oj) { 0 -> { subOpen = false; a.swapPin() }; 1 -> a.pip.nextCorner(); else -> { subOpen = false; a.unpin() } }
+                }
                 else if (subOpen) { a.subApply(subI, oj); subOpen = false } else {
                     val o = a.subOpts(subI)
                     if (o.first.size > 1) { oj = o.second.coerceAtLeast(0); subOpen = true }   // one option: the tile is dimmed and says so
@@ -1394,14 +1495,20 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 }
             }
         } else if (mode == 8) {
-            val n = a.settingsItems().size
-            when { up -> setSel = (setSel + n - 1) % n; dn -> setSel = (setSel + 1) % n; lf -> a.settingAct(setSel, -1); rt -> a.settingAct(setSel, 1); ok -> a.settingAct(setSel, 1) }
+            val n = if (setCat < 0) SET_CATS.size else SET_CATS[setCat].rows.size
+            when {
+                up -> if (setSel == 0) bkF = true else setSel -= 1   // above the first row: the back button
+                dn -> setSel = (setSel + 1) % n
+                setCat < 0 -> if (ok || rt) { if (SET_CATS[setSel].rows.size == 1) a.settingAct(SET_CATS[setSel].rows[0], 1) else { setCat = setSel; setSel = 0; bkF = false } }   // Remote Buttons opens its page
+                else -> { val i = SET_CATS[setCat].rows[setSel.coerceIn(0, n - 1)]; if (lf) a.settingAct(i, -1) else if (rt || ok) a.settingAct(i, 1) }
+            }
         } else if (mode == 9) {
             val gn = a.favGroupNames(); val n = gn.size; val mv = gn.count { it.first != "other" }   // "Other" is pinned last and cannot be moved
             when {
                 up || dn -> {
                     val dl = if (up) -1 else 1
                     if (grpGrab) { val to = grpSel + dl; if (to in 0 until mv) { a.moveFavGroup(grpSel, to); grpSel = to } }
+                    else if (up && grpSel <= 0) bkF = true
                     else if (n > 0) grpSel = (grpSel + dl + n) % n
                 }
                 ok -> if (grpSel < mv) grpGrab = !grpGrab
@@ -1410,8 +1517,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val rows = keyRows(); val r = rows.getOrNull(rbSel)
             when {
                 (up || dn) && rbSub == 1 -> rbOpt = 1 - rbOpt
-                up -> rbSel = (rbSel + rows.size - 1) % rows.size
-                dn -> rbSel = (rbSel + 1) % rows.size
+                up -> if (rbSel == 0) bkF = true else rbSel -= 1
+                dn -> rbSel = minOf(rbSel + 1, rows.lastIndex)   // stops at the bottom, like UP stops at the back button
                 ok && rbSub == 1 -> if (rbOpt == 0) rbSub = 2 else { a.keys.reset(r?.act); a.flash("${r?.label} reset", 2000); rbSub = 0 }
                 ok && r?.reset == true -> { a.keys.reset(null); a.flash("All buttons reset", 2000) }
                 ok && r?.act != null -> { rbSub = 1; rbOpt = 0 }
@@ -1425,7 +1532,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 lf -> if (hidSel % HID_COLS > 0) hidSel--
                 rt -> if (hidSel % HID_COLS < HID_COLS - 1 && hidSel + 1 < hs.size) hidSel++
-                up -> if (hidSel >= HID_COLS) hidSel -= HID_COLS
+                up -> if (hidSel >= HID_COLS) hidSel -= HID_COLS else bkF = true
                 dn -> if (hidSel + HID_COLS < hs.size) hidSel += HID_COLS else if (hidSel / HID_COLS < (hs.size - 1) / HID_COLS) hidSel = hs.size - 1   // short last row: go to its last logo
                 ok -> hs.getOrNull(hidSel)?.let { a.unhide(it); hidSel = hidSel.coerceIn(0, maxOf(0, hs.size - 2)) }
             }
@@ -1435,16 +1542,16 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 lf -> if (remDay > 0) { remDay--; remSel = 0 }
                 rt -> if (remDay < ds.lastIndex) { remDay++; remSel = 0 }
-                up -> remSel = maxOf(0, remSel - 1); dn -> remSel = minOf(maxOf(0, day.size - 1), remSel + 1)
+                up -> if (remSel <= 0) bkF = true else remSel -= 1; dn -> remSel = minOf(maxOf(0, day.size - 1), remSel + 1)
                 ok -> day.getOrNull(remSel)?.let { r -> r.ch?.let { openInfo(it, r.prog) } ?: run { a.removeRem(r.key); remSel = 0 } }   // channel gone from the playlists: OK just removes it
             }
         } else if (mode == 10) {
             val n = a.errLog.size
-            when { up -> logSel = maxOf(0, logSel - 1); dn -> logSel = minOf(maxOf(0, n - 1), logSel + 1); ok -> { a.errLog.clear(); logSel = 0 } }
+            when { up -> if (logSel <= 0) bkF = true else logSel -= 1; dn -> logSel = minOf(maxOf(0, n - 1), logSel + 1); ok -> { a.errLog.clear(); logSel = 0 } }
         } else if (mode == 6) {
             val n = THEMES.size
             when {
-                up -> { themeSel = (themeSel + n - 1) % n; a.setTheme(themeSel, false) }   // moving through the list previews each theme live
+                up -> if (themeSel == 0) bkF = true else { themeSel -= 1; a.setTheme(themeSel, false) }   // moving through the list previews each theme live
                 dn -> { themeSel = (themeSel + 1) % n; a.setTheme(themeSel, false) }
                 ok -> a.setTheme(themeSel, true)
             }

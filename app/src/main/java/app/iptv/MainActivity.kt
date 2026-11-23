@@ -58,7 +58,7 @@ const val REVERSED = true   // Telia style: higher channel numbers above, UP = h
 const val ROW_SCALE = 0.95f // 1.0 = original layout; lower = rows slightly shorter, so the options bar, info box and chips sit higher (everything stays aligned)
 
 class MainActivity : Activity() {
-    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var osd: TextView; lateinit var numV: TextView; lateinit var ui: Ui; lateinit var blurLayer: BlurLayer; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
+    lateinit var root: FrameLayout; lateinit var pv: PlayerView; lateinit var pip: Pip; lateinit var ghost: Box; lateinit var heldV: TextView; lateinit var osd: TextView; lateinit var numV: TextView; lateinit var ui: Ui; lateinit var snow: Snow; lateinit var blurLayer: BlurLayer; lateinit var banner: Banner; lateinit var msg: TextView; lateinit var spin: ProgressBar
     lateinit var player: ExoPlayer; lateinit var prefs: SharedPreferences
     lateinit var catchupBar: CatchupBar
     var channels = listOf<Ch>(); var shown = listOf<Ch>(); var groups = listOf("★ Favorites", "All")
@@ -220,6 +220,15 @@ class MainActivity : Activity() {
         loadFavPrefs(); fontIdx = prefs.getInt("fontSize", 1).coerceIn(0, FONT_NAMES.lastIndex)
         root = FrameLayout(this); root.setBackgroundColor(0xFF000000.toInt())
         pv = PlayerView(this).apply { useController = false; keepScreenOn = true }; root.addView(pv)
+        // pinned channel: the "is pinned" notice in place of the video, the corner picture, and the still frame used by Swap
+        heldV = TextView(this).apply {
+            setBackgroundColor(0xFF000000.toInt()); setTextColor(-1); gravity = Gravity.CENTER; setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px(40f)); setLineSpacing(px(14f), 1f)
+            compoundDrawablePadding = px(34f).toInt(); visibility = View.GONE }
+        root.addView(heldV, FrameLayout.LayoutParams(-1, -1))
+        val pw = px(360f).toInt(); val ph = px(203f).toInt()
+        pip = Pip(this, this); root.addView(pip, FrameLayout.LayoutParams(pw, ph, Gravity.TOP or Gravity.START))
+        ghost = Box(this, this).apply { addView(ImageView(this@MainActivity).apply { scaleType = ImageView.ScaleType.FIT_XY }, FrameLayout.LayoutParams(-1, -1)); visibility = View.GONE }
+        root.addView(ghost, FrameLayout.LayoutParams(pw, ph, Gravity.TOP or Gravity.START))
         // notices: a small card in the top-right corner, where Apple TV shows notifications; nothing else lives there
         osd = TextView(this).apply {
             setTextColor(-1); setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px(28f)); gravity = Gravity.CENTER_VERTICAL; setLineSpacing(0f, 1.15f)
@@ -243,6 +252,7 @@ class MainActivity : Activity() {
         banner = Banner(this, this).apply { visibility = View.GONE }; root.addView(banner, FrameLayout.LayoutParams(-1, -1))
         catchupBar = CatchupBar(this, this).apply { visibility = View.GONE }; root.addView(catchupBar, FrameLayout.LayoutParams(-1, -1))
         ui = Ui(this, this).apply { visibility = View.GONE }; root.addView(ui, FrameLayout.LayoutParams(-1, -1)); applyAlpha()
+        snow = Snow(this).apply { visibility = View.GONE }; root.addView(snow, FrameLayout.LayoutParams(-1, -1))   // above the menus
         setContentView(root); refreshTheme()
         player = makePlayer(); pv.player = player
         sources = readSrcs(); epgs = readEpgs()
@@ -313,6 +323,7 @@ class MainActivity : Activity() {
                     pv.postDelayed(retryRun, wait)
                 } else flashMid("$head\n${errText(e)}\nGave up. Select the channel again to retry", 10000)
             }
+            override fun onRenderedFirstFrame() { mainFrame() }
             override fun onPlaybackStateChanged(st: Int) {
                 pv.removeCallbacks(loadRun)
                 if (st == Player.STATE_BUFFERING) { if (!errShown) pv.postDelayed(loadRun, 700) } else hideLoading()
@@ -605,7 +616,7 @@ class MainActivity : Activity() {
 
     // ---- dialogs in the Apple TV style: rounded menu-coloured panel, faint buttons, the focused one turns white and grows ----
     fun px(v: Float) = v * resources.displayMetrics.widthPixels / 1920f   // 1920-px design units, like Ui
-    fun dBg(color: Int, stroke: Int = 0, r: Float = 14f): GradientDrawable =
+    fun dBg(color: Int, stroke: Int = 0, r: Float = 22f): GradientDrawable =
         GradientDrawable().apply { setColor(color); cornerRadius = px(r); if (stroke != 0) setStroke(px(2f).toInt(), stroke) }
 
     fun ipx(v: Float) = px(v).toInt()
@@ -628,19 +639,19 @@ class MainActivity : Activity() {
     // pop-ups are cards on the left like the main menu: title, content, then rows like the menu's (the last one Cancel or Close)
     fun showPanel(title: String, views: List<View>, buttons: List<DBtn>, keyboard: Boolean = false, width: Float = 520f): android.app.Dialog {
         val dlg = android.app.Dialog(this); dlg.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val ink = 0xFF1C1C1E.toInt(); val med = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        val ink = ui.ONF; val foc = ui.FOC; val med = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         buttons.forEachIndexed { i, b ->
             val ic = IconDrawable(b.icon, -1)
             val name = dText(b.label, 34f, -1, med).apply { setSingleLine() }
-            val tip = dText(b.tip, 24f, 0xA81C1C1E.toInt()).apply { visibility = View.GONE; setPadding(0, ipx(4f), ipx(24f), 0) }
+            val tip = dText(b.tip, 24f, if (ui.FOC == -1) 0xA81C1C1E.toInt() else ui.ONF2).apply { visibility = View.GONE; setPadding(0, ipx(4f), ipx(24f), 0) }
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; minimumHeight = ipx(80f); setPadding(ipx(26f), ipx(19f), 0, ipx(19f))
                 isFocusable = true; isClickable = true
                 addView(ImageView(this@MainActivity).apply { setImageDrawable(ic) }, LinearLayout.LayoutParams(ipx(34f), ipx(34f)).apply { topMargin = ipx(4f); rightMargin = ipx(24f) })
                 addView(LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; addView(name); addView(tip) }, LinearLayout.LayoutParams(0, -2, 1f))
                 fun look(f: Boolean) {   // the selected row turns white and grows a little, and shows its tip
-                    background = if (f) dBg(-1, 0, 14f) else null
+                    background = if (f) dBg(foc) else null
                     name.setTextColor(if (f) ink else -1); name.typeface = if (f) Typeface.DEFAULT_BOLD else med
                     ic.color = if (f) ink else -1; ic.invalidateSelf()
                     tip.visibility = if (f && b.tip.isNotEmpty()) View.VISIBLE else View.GONE
@@ -654,9 +665,22 @@ class MainActivity : Activity() {
         }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; background = MatBg(this@MainActivity, this, 40f)
-            clipChildren = false; clipToPadding = false; setPadding(0, ipx(40f), 0, ipx(20f))
+            clipChildren = false; clipToPadding = false; setPadding(0, ipx(44f), 0, ipx(20f))
             fun lp(top: Float) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = ipx(top); leftMargin = ipx(40f); rightMargin = ipx(40f) }
-            addView(dText(title, 44f, -1, Typeface.DEFAULT_BOLD), lp(0f))
+            // title row like Ui.head: the round ‹ (selectable, OK closes) in the rows' icon column, the title beside it
+            val bic = IconDrawable("back", -1)
+            val back = android.widget.FrameLayout(this@MainActivity).apply {
+                tag = "back"; isFocusable = true; isClickable = true; setOnClickListener { dlg.dismiss() }
+                addView(ImageView(this@MainActivity).apply { setImageDrawable(bic); setPadding(ipx(14f), ipx(14f), ipx(16f), ipx(14f)) }, -1, -1)
+                fun look(f: Boolean) { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(if (f) foc else 0x24FFFFFF) }
+                    bic.color = if (f) ink else -1; bic.invalidateSelf(); animate().scaleX(if (f) 1.08f else 1f).scaleY(if (f) 1.08f else 1f).setDuration(120).start() }
+                look(false); setOnFocusChangeListener { _, f -> look(f) }
+            }
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; clipChildren = false
+                addView(back, LinearLayout.LayoutParams(ipx(56f), ipx(56f)))
+                addView(dText(title, 44f, -1, Typeface.DEFAULT_BOLD), LinearLayout.LayoutParams(-2, -2).apply { leftMargin = ipx(18f) })
+            }, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = ipx(36f); rightMargin = ipx(40f) })
             views.forEachIndexed { i, v -> addView(v, lp(if (i == 0) 28f else 22f)) }
             addView(View(this@MainActivity).apply { setBackgroundColor(0x14FFFFFF) }, LinearLayout.LayoutParams(-1, maxOf(1, ipx(1f))).apply { topMargin = ipx(26f); leftMargin = ipx(40f); rightMargin = ipx(40f) })
             addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ipx(14f); leftMargin = ipx(20f); rightMargin = ipx(20f) })
@@ -665,10 +689,18 @@ class MainActivity : Activity() {
         dlg.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
             setLayout(ipx(width), -2)
-            attributes = attributes.apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; x = ipx(36f) }   // the left edge, like every other card
+            attributes = attributes.apply { gravity = Gravity.START or Gravity.TOP; x = ipx(36f); y = ipx(100f) }   // the left edge and top (Ui.PT), like every other card
             if (keyboard) setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
         }
-        panelBox = box; dlg.show(); ui.blur.start()   // the blur keeps refreshing while the popup is open
+        panelBox = box; dlg.show(); ui.blur.start()
+        // Christmas: the pop-up's card collects snow too (it lives in its own window, so it tells the snow layer where it is)
+        val snowAt = { val l = IntArray(2); box.getLocationOnScreen(l); snow.popup(dlg, l[0].toFloat(), l[1].toFloat(), box.width.toFloat(), box.height.toFloat(), px(40f)) }
+        box.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> snowAt() }
+        box.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+            override fun onViewDetachedFromWindow(v: View) { snow.popupGone(dlg) }
+        })
+        box.post { box.findFocus()?.takeIf { it.tag == "back" }?.let { box.focusSearch(it, View.FOCUS_DOWN)?.requestFocus() } }   // start on the first field or row, not the back button   // the blur keeps refreshing while the popup is open
         return dlg
     }
 
@@ -677,8 +709,7 @@ class MainActivity : Activity() {
         fun go() { val q = input.text.toString().trim(); d?.dismiss(); if (q.isNotEmpty()) search(q) }
         input.setOnEditorActionListener { _, _, _ -> go(); true }
         d = showPanel("Search", listOf(input, dText("Finds channels and shows on now", 24f, 0xA3FFFFFF.toInt())), listOf(
-            DBtn("Search", C_PUR, "search") { go() },
-            DBtn("Cancel", C_FIELD, "x") { it.dismiss() }), keyboard = true)
+            DBtn("Search", C_PUR, "search") { go() }), keyboard = true)
     }
 
     // main menu (OK button); the number is the icon id
@@ -802,25 +833,30 @@ class MainActivity : Activity() {
     var catchupProg: Prog? = null   // the past programme that is playing right now (null = live)
     var catchupSrc: String? = null   // the link of the catch-up that is playing (the seek bar uses it to ask for preview pictures)
 
-    fun play(c: Ch) = startPlay(c, c.url, null)
+    // info: show the channel info for a few seconds (only for Channel Up / Down and typed numbers, not BACK or swaps)
+    fun play(c: Ch, info: Boolean = false) = startPlay(c, c.url, null, info)
 
-    fun startPlay(c: Ch, url: String, cp: Prog?) {
+    fun startPlay(c: Ch, url: String, cp: Prog?, info: Boolean = false) {
         if (cur != null && cur != c) prev = cur
         cur = c; catchupProg = cp
         catchupSrc = if (cp != null) url else null
         if (cp != null) { catchupBar.resetThumbs(); catchupBar.target = -1L; catchupBar.show() } else catchupBar.visibility = View.GONE
         errShown = false; retryN = 0; hideLoading(); clearMid(); pv.removeCallbacks(retryRun); pv.removeCallbacks(loadRun)
         osd.removeCallbacks(hideOsd); osd.visibility = View.GONE
+        val held = cp == null && pip.ch?.url == c.url && !pip.parked   // the pinned channel: it already plays in the corner
+        showHeld(if (held) c else null)
+        if (held) { player.stop(); player.clearMediaItems() } else {
         val item = MediaItem.Builder().setUri(url).apply {
             // catch-up links have no .m3u8 extension, so tell ExoPlayer it is HLS
             if (cp != null) setMimeType(MimeTypes.APPLICATION_M3U8)
         }.build()
         player.setMediaItem(item); player.prepare(); player.playWhenReady = true
+        }
         // set the new delay on the playback thread after the switch, so the old stream's last frames keep their clock
         val us = avdMs(c) * 1000L; player.createMessage { _, _ -> avdUs = us }.send()
         if (cp == null) {
             prefs.edit().putString("last", c.url).apply()
-            if (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0)) ui.openSubPlayer(true)   // channel settings overlay, not while the lists are open
+            if (info && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))) ui.openSubPlayer(true)   // channel settings overlay, not while the lists are open
         }
     }
 
@@ -890,9 +926,60 @@ class MainActivity : Activity() {
         osd.removeCallbacks(hideOsd); osd.postDelayed(hideOsd, ms)
     }
 
+    // ---------- pinned channel (Pip), Apple PiP style ----------
+    // the big picture while the pinned channel itself is chosen: black, a pin, "<name> is pinned" (null = hide)
+    fun showHeld(c: Ch?) {
+        if (c == null) { heldV.visibility = View.GONE; return }
+        val t = "${c.name} is pinned\nIt plays in the corner. Change channel, or press OK to watch it full screen."
+        heldV.text = android.text.SpannableString(t).apply {
+            val k = t.indexOf('\n'); setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, k, 0)
+            setSpan(android.text.style.ForegroundColorSpan(0x99FFFFFF.toInt()), k, t.length, 0); setSpan(android.text.style.RelativeSizeSpan(0.65f), k, t.length, 0) }
+        heldV.setCompoundDrawables(null, IconDrawable("pin", 0x99FFFFFF.toInt()).apply { setBounds(0, 0, px(96f).toInt(), px(96f).toInt()) }, null, null)
+        heldV.visibility = View.VISIBLE
+    }
+    fun held() = heldV.visibility == View.VISIBLE
+    // a still of the main picture (Android 7+), for the picture that shrinks while the stream moves to the corner
+    fun snapMain(done: (Bitmap?) -> Unit) {
+        val sv = pv.videoSurfaceView as? SurfaceView
+        if (sv == null || android.os.Build.VERSION.SDK_INT < 24 || sv.width == 0 || player.videoSize.width == 0) { done(null); return }
+        val b = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888)
+        try { android.view.PixelCopy.request(sv, b, { r -> done(if (r == android.view.PixelCopy.SUCCESS) b else null) }, android.os.Handler(mainLooper)) } catch (e: Exception) { done(null) }
+    }
+    // runs once when the main player shows its next first picture (or after 8 s, so a stream that fails cannot strand the card)
+    var onMainFrame: (() -> Unit)? = null
+    val mainFrameLate = Runnable { mainFrame() }
+    fun mainFrame() { pv.removeCallbacks(mainFrameLate); onMainFrame?.let { onMainFrame = null; it() } }
+    fun afterMainFrame(f: () -> Unit) { onMainFrame = f; pv.removeCallbacks(mainFrameLate); pv.postDelayed(mainFrameLate, 8000L) }
+
+    // Pin: the picture shrinks into the corner; the big picture becomes the "pinned" notice (one stream, not two)
+    fun pinCh(c: Ch) {
+        ui.close()
+        snapMain { b -> pip.pinFromFull(c, b); player.stop(); player.clearMediaItems(); showHeld(c) }
+    }
+    // OK on the notice (or Unpin while on it): the corner picture grows to full screen and the pin ends
+    fun pinFull() {
+        val c = pip.ch ?: return; ui.close()
+        pip.growFull { afterMainFrame { pip.drop() }; play(c) }   // play() runs with pip parked, so it opens the real stream under the card
+    }
+    // Swap: the corner picture grows to full screen while the big one shrinks into the corner, then they trade players
+    fun swapPin() {
+        val p = pip.ch ?: return; val c = cur ?: return
+        if (held()) { pinFull(); return }
+        ui.close()
+        snapMain { b ->
+            val g = ghost.getChildAt(0) as ImageView; g.setImageBitmap(b); ghost.visibility = View.VISIBLE; ghost.setBox(ghost.full(), 0f)
+            ghost.animBox(pip.cornerBox(), 18 * pip.u(), 450)
+            pip.growFull {
+                afterMainFrame { pip.becomeCorner(c, b); ghost.visibility = View.GONE; g.setImageBitmap(null) }
+                play(p); switchTo(p)
+            }
+        }
+    }
+    fun unpin() { if (held()) pinFull() else pip.unpin() }
+
     fun zap(d: Int) {
         val l = if (shown.isNotEmpty()) shown else channels; if (l.isEmpty()) return
-        val i = l.indexOf(cur); play(l[((if (i < 0) 0 else i) + d + l.size) % l.size])
+        val i = l.indexOf(cur); play(l[((if (i < 0) 0 else i) + d + l.size) % l.size], true)
     }
 
     var dlg: android.app.Dialog? = null
@@ -920,8 +1007,7 @@ class MainActivity : Activity() {
         }
         val d = showPanel("Playlists & TV Guides", listOf(body), listOf(
             DBtn("Add Playlist Here", C_PUR, "plus", "Type the address with the remote instead") { it.dismiss(); addSource() },
-            DBtn("Reload", C_FIELD, "refresh", "Downloads the playlists, guides and logos again. If a download fails, the old copy is kept.") { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() },
-            DBtn("Close", C_FIELD, "x") { it.dismiss() }), width = 680f)
+            DBtn("Reload", C_FIELD, "refresh", "Downloads the playlists, guides and logos again. If a download fails, the old copy is kept.") { it.dismiss(); Thread { clearLogoAndGuideCaches(); activate(act, true) }.start() }), width = 680f)
         d.setOnDismissListener { stopServer(); if (ui.mode == 3) { ui.touch(); ui.requestFocus() } }
         dlg = d
     }
@@ -937,11 +1023,10 @@ class MainActivity : Activity() {
                     if (e.text.isNotBlank()) { epgs = epgs + Epg("o_$sid", "$nm EPG", e.text.toString().trim(), false, listOf(sid), sid); saveEpgs(epgs) }
                     saveSrcs(sources); activate(sources.lastIndex, true)
                 }
-            },
-            DBtn("Cancel", C_FIELD, "x") { it.dismiss() }), width = 680f, keyboard = true)
+            }), width = 680f, keyboard = true)
     }
 
-    val numRun = Runnable { numV.visibility = View.GONE; val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { if (it != cur) play(it) } }   // typing the channel already on does nothing
+    val numRun = Runnable { numV.visibility = View.GONE; val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { if (it != cur) play(it, true) } }   // typing the channel already on does nothing
 
     // BACK is handled here (before any view sees it): a short press goes back, holding it exits the app completely
     var backLong = false; var okHold = false; var okLong = false
@@ -963,7 +1048,7 @@ class MainActivity : Activity() {
         if (ev.keyCode == KeyEvent.KEYCODE_BACK) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) backLong = false
-                else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true; exitApp() }
+                else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true; if (pip.ch != null) { unpin(); flash("Unpinned: hold BACK again to exit the app", 3000) } else exitApp() }   // with a pin, the first hold only unpins
             } else if (ev.action == KeyEvent.ACTION_UP) {
                 if (!backLong) backShort(ev)
                 backLong = false
@@ -977,6 +1062,8 @@ class MainActivity : Activity() {
         if (ui.mode != 0) { ui.onKeyDown(KeyEvent.KEYCODE_BACK, ev); return }
         if (catchupProg != null && catchupBar.visibility == View.VISIBLE) { catchupBar.close(); return }   // BACK first closes the seek bar (and cancels a jump you haven't confirmed)
         if (catchupProg != null) { cur?.let { flash("Back to live", 1500); play(it) }; return }
+        // with a channel pinned, BACK swaps with it (on its own "pinned" notice: back to the channel before)
+        if (pip.ch != null && !held()) { swapPin(); return }
         if (prev != null) prev?.let { play(it) } else flash("Hold BACK to exit the app", 2500)
     }
 
@@ -985,6 +1072,9 @@ class MainActivity : Activity() {
     fun exitApp() { exiting = true; finishAndRemoveTask() }
 
     override fun onKeyDown(k: Int, e: KeyEvent): Boolean {
+        // Swap Pinned also works over the info that shows for a few seconds after a channel change
+        if ((ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0)) && keys.actFor(k)?.id == "swap") {
+            if (pip.ch == null) flash("Nothing pinned: press OK and choose Pin to pin the channel you are watching", 4000) else swapPin(); return true }
         if (ui.mode != 0) { ui.requestFocus(); return ui.onKeyDown(k, e) }
         if (catchupProg != null) {
             when (k) {
@@ -1000,7 +1090,7 @@ class MainActivity : Activity() {
         }
         when (keys.actFor(k)?.id) {   // the viewer's button choices (Remote Buttons)
             "menu" -> { ui.openMenu(); return true }
-            "settings" -> { if (cur != null) ui.openSubPlayer(false); return true }
+            "settings" -> { if (held()) pinFull() else if (cur != null) ui.openSubPlayer(false); return true }   // on the "pinned" notice OK watches it full screen
             "chUp" -> { zap(1); return true }
             "chDown" -> { zap(-1); return true }
             "list" -> { ui.open(1); return true }
@@ -1025,10 +1115,10 @@ class MainActivity : Activity() {
         return true
     }
 
-    override fun onStop() { super.onStop(); if (catchupProg == null) player.stop() else player.pause();   // live: let go of the hardware decoders while in the background; catch-up keeps its position
+    override fun onStop() { super.onStop(); if (catchupProg == null) player.stop() else player.pause(); pip.stop();   // live: let go of the hardware decoders while in the background; catch-up keeps its position
         stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick); pv.removeCallbacks(remRun) }
     override fun onStart() {
-        super.onStart(); if (cur != null) { if (player.playbackState == Player.STATE_IDLE) { player.prepare(); player.playWhenReady = true } else player.play() }
+        super.onStart(); pip.start(); if (cur != null) { if (player.playbackState == Player.STATE_IDLE) { player.prepare(); player.playWhenReady = true } else player.play() }
         pv.removeCallbacks(updTick); pv.postDelayed(updTick, 30_000L)
         pv.removeCallbacks(remRun); pv.postDelayed(remRun, 5_000L)
         pv.removeCallbacks(epgTick); pv.postDelayed(epgTick, 60_000L)   // coming back from Home: refresh the guide a minute later if it is older than the refresh setting
@@ -1039,7 +1129,7 @@ class MainActivity : Activity() {
         if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) { logos.evictAll(); progCache.evictAll(); descCache.evictAll(); hitKey.clear() }
     }
     override fun onDestroy() {
-        super.onDestroy(); player.release()
+        super.onDestroy(); player.release(); pip.drop()
         if (exiting) { try { epgDb.close() } catch (e: Exception) {}; android.os.Process.killProcess(android.os.Process.myPid()) }
     }
 }

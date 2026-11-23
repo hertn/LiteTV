@@ -43,6 +43,7 @@ val ICON_SRC: Map<String, List<Pair<String, Boolean>>> = mapOf(
     "back15" to listOf("M4 12a8 8 0 1 0 2.4-5.7" to false, "M4 4v4.5h4.5" to false),
     "grid" to listOf("M6.0 4.0h12.0a3.0 3.0 0 0 1 3.0 3.0v10.0a3.0 3.0 0 0 1 -3.0 3.0h-12.0a3.0 3.0 0 0 1 -3.0 -3.0v-10.0a3.0 3.0 0 0 1 3.0 -3.0z" to false, "M3 10h18M9 10v10" to false),
     "more" to listOf("M4.4 12.0a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0z" to true, "M10.4 12.0a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0z" to true, "M16.4 12.0a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0z" to true),
+    "pin" to listOf("M9 3h6M10 3v7l-3 4h10l-3-4V3" to false, "M12 14v7" to false),   // push pin
     "bell" to listOf("M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" to false, "M10 20.5a2 2 0 0 0 4 0" to false)
 )
 private val iconCache = HashMap<String, List<Pair<Path, Boolean>>>()

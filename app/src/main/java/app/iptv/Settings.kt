@@ -70,8 +70,19 @@ fun MainActivity.settingsItems() = listOf(
 // icon in the little square at the start of each row
 val SETTING_ICONS = listOf("palette", "text", "leaf", "blur", "layers", "gauge", "moon", "refresh", "refresh", "cal", "down", "star", "star", "sliders", "remote", "down", "bug", "info")
 
-// a heading above these rows
-fun MainActivity.settingSection(i: Int): String? = when (i) { 0 -> "APPEARANCE"; 5 -> "PLAYBACK"; 7 -> "PLAYLISTS & TV GUIDE"; 11 -> "FAVORITES"; 14 -> "REMOTE"; 15 -> "APP"; else -> null }
+// Settings opens on these categories (Apple TV style, nothing to scroll); OK opens one, BACK comes back.
+// rows = indices into settingsItems. Remote Buttons has one row: it opens its own page straight away.
+class SetCat(val name: String, val icon: String, val rows: List<Int>, val desc: String)
+val SET_CATS = listOf(
+    SetCat("Remote Buttons", "remote", listOf(14), "Choose what each button on the remote does while watching"),
+    SetCat("Appearance", "palette", listOf(0, 1, 2, 3, 4), "Theme, text size, decorations, blur and transparency"),
+    SetCat("Playback", "gauge", listOf(5, 6), "Buffering and the sleep timer"),
+    SetCat("Playlists & TV Guide", "cal", listOf(7, 8, 9, 10), "When playlists and the TV guide update, and how many days of programmes to keep"),
+    SetCat("Favorites", "star", listOf(11, 12, 13), "How favorites are sorted and grouped"),
+    SetCat("App", "info", listOf(15, 16, 17), "Updates, the error log and About LiteTV"))
+// the value shown on a category's row: its most useful setting
+fun MainActivity.catValue(k: Int): String { val s = settingsItems(); return when (k) {
+    1 -> s[0].second + " · " + s[1].second; 2 -> s[5].second; 3 -> s[7].second; 4 -> s[11].second; 5 -> s[15].second.ifEmpty { verLabel }; else -> "" } }
 
 // the explanation of the selected row (shown in the footer)
 fun MainActivity.settingDesc(i: Int): String = when (i) {
