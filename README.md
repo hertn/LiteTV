@@ -85,6 +85,9 @@ Updating with `adb install -r` keeps your playlists and settings.
 
 ## First start
 
+The full **[LiteTV manual](https://hertn.github.io/LiteTV/manual.html)** explains every feature: the remote, the guides, catch-up, reminders, favorites, pinning, managing playlists and every setting.
+
+
 1. Hold OK (or press Menu) on the remote to open the main menu, then choose **Playlists**.
 2. Scan the QR code with your phone (or open the address shown on the screen). The phone and the TV must be on the same Wi-Fi network.
 3. On the web page, add your playlists (a name and the M3U link) and press **Save**.

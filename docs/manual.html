@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LiteTV manual: how to use the IPTV app for Android TV</title>
+<meta name="description" content="The LiteTV manual: adding playlists, the remote, channel list, TV Guide, Quick Guide, catch-up, reminders, favorites, pinning a channel, settings and fixes.">
+<link rel="canonical" href="https://hertn.github.io/LiteTV/manual.html">
+<meta name="theme-color" content="#1a1420">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="LiteTV">
+<meta property="og:title" content="LiteTV manual">
+<meta property="og:description" content="How to use LiteTV on Android TV: playlists, guides, reminders, favorites, pin a channel and settings.">
+<meta property="og:url" content="https://hertn.github.io/LiteTV/manual.html">
+<meta property="og:image" content="https://hertn.github.io/LiteTV/banner.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+:root{
+  --bg:#141019; --surface:#1e1826; --surface-2:#2a2233; --line:#352c40;
+  --text:#f3eff7; --text-2:#b6abc2; --text-3:#8a7f96;
+  --accent:#9b0ee0; --accent-2:#d9b8f0; --on-accent:#fff; --r:14px;
+  --btn:#9b0ee0; --fill:rgba(120,120,128,.24); --fill-2:rgba(120,120,128,.36);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+header.hero{text-align:center;padding-top:72px;padding-bottom:40px}
+.hero img.icon{width:96px;height:96px;border-radius:22px}
+h1{font-size:clamp(2.2rem,6vw,3.4rem);line-height:1.08;margin:18px 0 8px;letter-spacing:-.02em}
+h1 span{color:var(--accent-2)}
+.tag{color:var(--text-2);margin:0 0 18px;font-size:1.2rem}
+.lede{max-width:640px;margin:0 auto 28px;font-size:1.1rem}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 22px;border-radius:999px;text-decoration:none;font-weight:600;font-size:1rem;background:var(--fill);color:var(--text);transition:transform .12s,opacity .12s,background-color .12s}
+.btn:hover{background:var(--fill-2)}
+.btn.primary{background:var(--btn);color:#fff}
+.btn.primary:hover{opacity:.9}
+.btn:active{transform:scale(.97);opacity:.8}
+.btn:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.btn{transition:none}.btn:active{transform:none}}
+.note{color:var(--text-3);font-size:.9rem;margin-top:14px}
+figure{margin:0}
+.shot img{width:100%;height:auto;display:block;border-radius:var(--r);border:1px solid var(--line)}
+figcaption{color:var(--text-2);font-size:.9rem;margin-top:8px}
+section{padding-top:56px;padding-bottom:56px;border-top:1px solid var(--line)}
+h2{font-size:1.8rem;margin:0 0 20px;letter-spacing:-.01em}
+h3{font-size:1.05rem;margin:0 0 6px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.card p{margin:0;color:var(--text-2)}
+.shots2{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+ol.steps{padding-left:1.2em}
+ol.steps li{margin-bottom:10px}
+code{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:.9em}
+footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--text-3);font-size:.9rem;text-align:center}
+
+.hub{padding-top:16px}
+.hub a{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--fill);text-decoration:none;font-weight:600;font-size:.95rem;color:var(--text-2)}
+.hub a:hover{background:var(--fill-2);color:var(--text)}
+.hub a:focus-visible{outline:3px solid var(--text);outline-offset:3px}
+header.hero{padding-top:40px}
+.feat{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.feat .card{display:flex;flex-direction:column;gap:6px}
+.ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--surface-2);color:var(--accent-2);margin-bottom:6px}
+.ic svg{width:22px;height:22px}
+
+
+
+.man{max-width:820px}
+.mhead{text-align:center;padding:24px 0 32px}
+.mhead .icon{border-radius:15px}
+.mhead h1{font-size:clamp(2rem,5vw,2.8rem)}
+.toc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px 24px;margin-bottom:8px}
+.toc h2{font-size:1.1rem;margin:0 0 10px}
+.toc ol{margin:0;padding-left:1.3em;columns:2 220px;column-gap:32px}
+.toc li{margin:0 0 6px;break-inside:avoid}
+.toc a{color:var(--accent-2);text-decoration:none}.toc a:hover{text-decoration:underline}
+.man section{padding:44px 0;scroll-margin-top:12px}
+.man section a{color:var(--accent-2)}
+.man p,.man li,.man dd{color:var(--text-2)}
+.man strong{color:var(--text)}
+.man h3{margin-top:22px}
+.man ul{padding-left:1.2em}.man li{margin-bottom:8px}
+.man .shot{margin:4px 0 20px}
+kbd{display:inline-block;min-width:1.6em;padding:1px 7px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);border-bottom-width:2px;color:var(--text);font:600 .82em/1.5 inherit;font-family:inherit;text-align:center;white-space:nowrap}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r)}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--surface);color:var(--text)}td{color:var(--text-2)}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap}
+@media (max-width:560px){td:first-child{white-space:normal}}
+dl.sets dt{font-weight:700;margin-top:16px;color:var(--text)}
+dl.sets dd{margin:4px 0 0}
+</style>
+</head>
+<body>
+<nav class="hub wrap" aria-label="LiteTV"><a href="./"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg> LiteTV home</a></nav>
+<main class="wrap man">
+  <header class="mhead">
+    <img class="icon" src="icon.png" width="64" height="64" alt="">
+    <h1>LiteTV manual</h1>
+    <p class="tag">Everything LiteTV can do, and how to get to it with the remote. Written for version 2.4.</p>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#start">Getting started</a></li>
+      <li><a href="#remote">The remote while watching</a></li>
+      <li><a href="#menus">Moving around menus</a></li>
+      <li><a href="#ok">The OK screen</a></li>
+      <li><a href="#list">Channel list</a></li>
+      <li><a href="#playlists">Playlists and categories</a></li>
+      <li><a href="#tvguide">TV Guide</a></li>
+      <li><a href="#quick">Quick Guide</a></li>
+      <li><a href="#info">Program Info and catch-up</a></li>
+      <li><a href="#reminders">Reminders</a></li>
+      <li><a href="#favorites">Favorites</a></li>
+      <li><a href="#hidden">Hidden channels and search</a></li>
+      <li><a href="#pin">Pin a channel</a></li>
+      <li><a href="#settings">Settings</a></li>
+      <li><a href="#backup">Backup and restore</a></li>
+      <li><a href="#updates">Updates</a></li>
+      <li><a href="#trouble">Fixing common problems</a></li>
+    </ol>
+  </nav>
+
+  <section id="start">
+    <h2>Getting started</h2>
+    <p>LiteTV comes empty: it has no channels of its own. You add one or more <strong>M3U playlists</strong> (a link from your IPTV provider) and, if you want to see what's on, a <strong>TV guide</strong> (an EPG or XMLTV link).</p>
+    <h3>From your phone (easiest)</h3>
+    <ol class="steps">
+      <li>Hold <kbd>OK</kbd> (or press <kbd>Menu</kbd>) to open the main menu, and choose <strong>Playlists</strong>.</li>
+      <li>Scan the QR code with your phone, or type the address shown on the TV into a browser. The phone and the TV must be on the same Wi-Fi.</li>
+      <li>Add a playlist: a name and its M3U link. Press <strong>Save</strong>.</li>
+      <li>For the guide, add an EPG link to the playlist on the same page, or open <strong>Shared EPGs</strong> to add one guide and use it for all playlists or only some.</li>
+    </ol>
+    <p>If a playlist has no guide set, LiteTV uses the guide named in the M3U file itself, if it names one.</p>
+    <h3>On the TV</h3>
+    <p>In the Playlists window, choose <strong>Add Playlist Here</strong> and type the name and link with the remote.</p>
+  </section>
+
+  <section id="remote">
+    <h2>The remote while watching</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Button</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>Menu</kbd> or hold <kbd>OK</kbd></td><td>Main menu: Search, Playlists, TV Guide, Reminders, Hidden Channels, Settings</td></tr>
+        <tr><td><kbd>OK</kbd> or <kbd>Info</kbd></td><td><a href="#ok">The OK screen</a>: what's on, and the channel's own settings</td></tr>
+        <tr><td><kbd>Left</kbd></td><td><a href="#list">Channel list</a></td></tr>
+        <tr><td><kbd>Right</kbd></td><td><a href="#quick">Quick Guide</a></td></tr>
+        <tr><td><kbd>Guide</kbd> or <kbd>Blue</kbd></td><td><a href="#tvguide">TV Guide</a> grid</td></tr>
+        <tr><td><kbd>Up</kbd> / <kbd>Down</kbd>, <kbd>CH+</kbd> / <kbd>CH−</kbd></td><td>Change channel</td></tr>
+        <tr><td><kbd>0</kbd>–<kbd>9</kbd></td><td>Type a channel number; it shows big in the top-right corner</td></tr>
+        <tr><td><kbd>Back</kbd></td><td>The channel you watched before (with a channel pinned: swap with it)</td></tr>
+        <tr><td>Hold <kbd>Back</kbd></td><td>Closes every menu at once. With nothing open, it unpins a pinned channel, and only then exits the app</td></tr>
+        <tr><td><kbd>Yellow</kbd></td><td>Swap with the pinned channel</td></tr>
+        <tr><td><kbd>Play/Pause</kbd>, <kbd>⏩</kbd> / <kbd>⏪</kbd></td><td>Pause, and skip 30 seconds when the channel allows it</td></tr>
+      </tbody>
+    </table></div>
+    <p>Every one of these can be changed or given extra buttons in <a href="#settings">Settings › Remote Buttons</a>.</p>
+  </section>
+
+  <section id="menus">
+    <h2>Moving around menus</h2>
+    <p>Every menu works the same way:</p>
+    <ul>
+      <li><kbd>Back</kbd> goes one step back. Every page and pop-up also has a round Back button at the top, which you can select like any other row.</li>
+      <li><strong>Hold</strong> <kbd>Up</kbd> or <kbd>Down</kbd> to scroll to the end of a list. It stops there. Press once more and it goes round to the other end (the round Back button counts as the top).</li>
+      <li><strong>Hold</strong> <kbd>Back</kbd> to close everything at once, however deep you are, and get back to the picture.</li>
+    </ul>
+    <p>The channel list and the guides are different: they go round on their own, and three quick taps of <kbd>Up</kbd> or <kbd>Down</kbd> jump to the top or bottom.</p>
+  </section>
+
+  <section id="ok">
+    <h2>The OK screen</h2>
+    <figure class="shot"><img src="channel-settings.jpg" width="1920" height="1080" loading="lazy" alt="The OK screen: the show on now with its progress and tiles for Program Info, TV Guide, audio track, subtitles, aspect ratio and audio delay, with the Aspect Ratio list open: Fit, Zoom, Wider and Taller"></figure>
+    <p>Press <kbd>OK</kbd> while watching to see what's on now, how far along it is and a row of tiles. It hides itself after 5 seconds if you don't press anything.</p>
+    <ul>
+      <li><strong>Program Info</strong> and <strong>TV Guide</strong>: see <a href="#info">Program Info</a> and <a href="#tvguide">TV Guide</a>.</li>
+      <li><strong>Pin</strong>: keep this channel playing in a corner. See <a href="#pin">Pin a channel</a>.</li>
+      <li><strong>Audio</strong> and <strong>Subtitles</strong>: pick a language or track. Dimmed with "Only one" when the channel has just one.</li>
+      <li><strong>Aspect ratio</strong>: <em>Fit</em> shows the whole picture. Many channels send a 16:9 picture with black bars inside it; <em>Zoom</em> enlarges the picture and trims the edges, <em>Wider</em> removes bars at the sides and <em>Taller</em> bars at the top and bottom.</li>
+      <li><strong>Audio delay</strong>: fixes sound that is out of step with the picture, from −30 to +30 seconds in 50 ms steps. <kbd>Left</kbd> / <kbd>Right</kbd> jump a whole second. Plus means the sound comes later.</li>
+    </ul>
+    <p>Audio, subtitles, aspect ratio and delay are saved <strong>for each channel</strong>, and used again every time it plays.</p>
+  </section>
+
+  <section id="list">
+    <h2>Channel list</h2>
+    <figure class="shot"><img src="channels.jpg" width="1920" height="1080" loading="lazy" alt="LiteTV&#x27;s channel list over a playing show: channel logos, the show on now with its time and progress, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel"></figure>
+    <p>Press <kbd>Left</kbd>. Each channel shows its logo, the show on now, a LIVE badge, minutes left and a progress bar. The channel you're watching keeps a grey box round its logo.</p>
+    <ul>
+      <li>The list goes round: after the last channel it starts again at the first, marked with a thin line and a round arrow.</li>
+      <li>Three quick taps of <kbd>Up</kbd> or <kbd>Down</kbd> jump to the top or the bottom.</li>
+      <li><kbd>Right</kbd> on a channel opens its buttons: <strong>Watch</strong>, <strong>TV Guide</strong>, <strong>Program Info</strong>, <strong>Channel Settings</strong>, <strong>Add to Favorites</strong> and <strong>Hide Channel</strong>.</li>
+      <li><kbd>Left</kbd> again opens the <a href="#playlists">categories and playlists</a>.</li>
+    </ul>
+  </section>
+
+  <section id="playlists">
+    <h2>Playlists and categories</h2>
+    <p>In the channel list, press <kbd>Left</kbd> for the <strong>Categories</strong> of the current playlist, and <kbd>Left</kbd> again for <strong>Playlists</strong>. OK picks one.</p>
+    <ul>
+      <li>The first row of Playlists is <strong>★ Favorites</strong>, with "All Favorites" and your favorite groups as its categories.</li>
+      <li>The playlist you're on has a tick.</li>
+    </ul>
+    <h3>Move or remove a playlist</h3>
+    <ol class="steps">
+      <li>In Playlists, select a playlist and <strong>hold</strong> <kbd>OK</kbd>. A small card opens beside it: <strong>Move</strong>, <strong>Remove</strong>, <strong>Cancel</strong>.</li>
+      <li><strong>Move</strong> picks it up: its grab handle turns into arrows. <kbd>Up</kbd> / <kbd>Down</kbd> moves it, <kbd>OK</kbd> drops it. The new order is saved right away.</li>
+      <li><strong>Remove</strong> asks first, and starts on Cancel so a stray press is safe. Removing a playlist also removes its own guide. Your favorites from it stay saved and come back if you add it again.</li>
+    </ol>
+    <p>Favorites always stays at the top and can't be moved. If you remove the playlist you're watching, LiteTV switches to the first one; if you remove the last one, it opens the setup screen.</p>
+  </section>
+
+  <section id="tvguide">
+    <h2>TV Guide</h2>
+    <figure class="shot"><img src="tv-guide.jpg" width="1920" height="1080" loading="lazy" alt="The TV Guide grid: the selected show on top, then channels down the side and their shows across a two-hour timeline, with a line at the current time and the played part of each live show shaded"></figure>
+    <p>Every channel down the side and its shows across a two-hour timeline. A line marks the current time and the played part of each live show is shaded. Open it with <kbd>Guide</kbd> / <kbd>Blue</kbd>, from the main menu, the OK screen or the channel list's buttons.</p>
+    <ul>
+      <li><kbd>OK</kbd> on a live show watches it, on a later show sets a <a href="#reminders">reminder</a>, and on a past show plays it as catch-up (when the channel offers that).</li>
+      <li>Hold <kbd>OK</kbd> for <a href="#info">Program Info</a>.</li>
+    </ul>
+  </section>
+
+  <section id="quick">
+    <h2>Quick Guide</h2>
+    <figure class="shot"><img src="guide.jpg" width="1920" height="1080" loading="lazy" alt="The Quick Guide: date pills with Today in white, a column of channel logos, the shows on Comedy Central by time, and a card with the live show&#x27;s description"></figure>
+    <p>One channel at a time, day by day, beside the picture: press <kbd>Right</kbd>. Flip through channels to see what's on later without leaving the one you're watching.</p>
+    <ul>
+      <li>The chosen day is a white pill. Picking another day lands on the show at the same time of day.</li>
+      <li>OK on a date goes to its shows; OK on a show watches it, sets a reminder or plays catch-up, like the TV Guide.</li>
+    </ul>
+  </section>
+
+  <section id="info">
+    <h2>Program Info and catch-up</h2>
+    <figure class="shot"><img src="program.jpg" width="1920" height="1080" loading="lazy" alt="Program info for Mr. Bean: LIVE badge, category, channel, time, minutes left, description, Watch Live and Guide buttons, and a Later on row"></figure>
+    <p>A full page about one show: category, channel, time, minutes left and the description, with <strong>Watch</strong> and <strong>Guide</strong> buttons. The <strong>Later on</strong> row lists the next shows on that channel; select one and press <kbd>OK</kbd> to set or remove a reminder.</p>
+    <p><strong>Catch-up</strong>: on channels that keep past shows, pick a show that has ended in the TV Guide or Quick Guide to play it from the start. A bar shows where you are, and you can skip back and forward. The number buttons do nothing during catch-up, so a stray press won't throw you back to live TV.</p>
+  </section>
+
+  <section id="reminders">
+    <h2>Reminders</h2>
+    <figure class="shot"><img src="reminders.jpg" width="1920" height="1080" loading="lazy" alt="Reminders: a strip of the days that have reminders, and the chosen day&#x27;s reminder with its time, channel logo and show"></figure>
+    <p>Set a reminder on any show that hasn't started yet, from the TV Guide, the Quick Guide or Program Info. When it starts, a card asks if you want to switch to it.</p>
+    <ul>
+      <li>Reminders <strong>repeat</strong>: every airing of that show at that time on that channel gets one, until you remove it. Episode numbers like (1/8) don't matter.</li>
+      <li>The <strong>Reminders</strong> page in the main menu shows only the days that have reminders, each with its time, channel logo and show. OK opens Program Info.</li>
+    </ul>
+  </section>
+
+  <section id="favorites">
+    <h2>Favorites</h2>
+    <p>Add a channel with <strong>Add to Favorites</strong> in the channel list's buttons. Favorites from all your playlists are together under <strong>★ Favorites</strong>, the first row of the Playlists panel.</p>
+    <ul>
+      <li>Favorites are grouped by the channel's group in its playlist (News, Sport and so on). Channels without a group go under "Other".</li>
+      <li>Change how they're sorted in <a href="#settings">Settings › Favorites</a>: by your custom groups, order added, channel number, A to Z or Z to A. <strong>Within Groups</strong> sorts the channels inside each group, and <strong>Reorder Groups</strong> puts the groups in your own order.</li>
+      <li>Favorites are kept by the channel's address, so they survive playlist refreshes and removing a playlist.</li>
+    </ul>
+  </section>
+
+  <section id="hidden">
+    <h2>Hidden channels and search</h2>
+    <p><strong>Hide Channel</strong> in the channel list's buttons takes a channel out of your lists. The <strong>Hidden Channels</strong> page in the main menu shows hidden channels as a grid of logos; <kbd>OK</kbd> unhides one.</p>
+    <p><strong>Search</strong> in the main menu finds channels across all your playlists as you type.</p>
+  </section>
+
+  <section id="pin">
+    <h2>Pin a channel</h2>
+    <figure class="shot"><img src="pin.jpg" width="1920" height="1080" loading="lazy" alt="A Christmas tree on the Holidayscapes channel, with Stingray Cozy Cafe pinned in the top-right corner: a small live picture with its logo, name and a LIVE badge"></figure>
+    <p>Keep a second channel playing, muted, in a corner while you watch another. Handy for waiting out an ad break.</p>
+    <ol class="steps">
+      <li>On the channel you want to keep, press <kbd>OK</kbd> and choose <strong>Pin</strong>. It shrinks into a corner, with its logo, the show, LIVE and the time left.</li>
+      <li>Change to another channel as usual.</li>
+      <li><kbd>Back</kbd> or <kbd>Yellow</kbd> swaps the two: the pinned one goes full screen, the other moves to the corner.</li>
+    </ol>
+    <p>Press <kbd>OK</kbd> and select the pinned tile for <strong>Swap</strong>, <strong>Corner</strong> (each OK moves it to the next corner) and <strong>Unpin</strong>. You can also hold <kbd>Back</kbd> with no menus open to unpin.</p>
+  </section>
+
+  <section id="settings">
+    <h2>Settings</h2>
+    <figure class="shot"><img src="settings.jpg" width="1920" height="1080" loading="lazy" alt="Settings in the Christmas theme: a round Back button and six categories, Remote Buttons (selected, in red), Appearance, Playback, Playlists &amp; TV Guide, Favorites and App, each with its current value"></figure>
+    <p>Main menu › Settings. Six categories; the selected row explains itself under its name.</p>
+    <dl class="sets">
+      <dt>Remote Buttons</dt>
+      <dd>Every action with its buttons. Add your own button to any action, or reset to the defaults. Actions: Open Main Menu, Channel Settings, Channel Up / Down, Channel List, TV Guide, Quick Guide, Previous Channel, Swap Pinned, Play / Pause and Skip 30 s.</dd>
+      <dt>Appearance</dt>
+      <dd><strong>Themes</strong>: eight colours (Purple, Blue, Teal, Green, Yellow, Orange, Pink, Graphite), plus Christmas (snow and a garland), New Year (gold confetti) and Halloween (bats). <strong>Font Size</strong>: Smaller to Large. <strong>Seasonal Decorations</strong>: a small holiday icon by the LiteTV name. <strong>Blur Behind Menus</strong> and <strong>Transparency</strong>: turn them off for solid menus, lighter on slow TVs.</dd>
+      <dt>Playback</dt>
+      <dd><strong>Buffering</strong>: Fast Start (default) or Steady, for weak Wi-Fi. <strong>Sleep Timer</strong>: stops playback after a while.</dd>
+      <dt>Playlists &amp; TV Guide</dt>
+      <dd>How often playlists and the guide refresh (or manual only), how many days of guide to keep, and <strong>Update EPG Now</strong>.</dd>
+      <dt>Favorites</dt>
+      <dd>Favorites Sort, Within Groups and Reorder Groups. See <a href="#favorites">Favorites</a>.</dd>
+      <dt>App</dt>
+      <dd><strong>App Update</strong>, the <strong>Error Log</strong> (what went wrong with streams and downloads), and <strong>About</strong>: version, your playlists and guides, this TV, and QR codes for GitHub and Ko-fi.</dd>
+    </dl>
+  </section>
+
+  <section id="backup">
+    <h2>Backup and restore</h2>
+    <p>On the phone setup page (main menu › Playlists, scan the code), <strong>Download backup</strong> saves your playlists, guides and favorites in one file. On another TV, open the same page and use <strong>Restore from file</strong>. Restoring replaces the lists on that TV.</p>
+  </section>
+
+  <section id="updates">
+    <h2>Updates</h2>
+    <p>LiteTV checks for a new version when it starts and about every 12 hours. When one is out, a notice says so, and the main menu shows "Settings ● Update". Install it from <strong>Settings › App › App Update</strong>. Updating keeps your playlists and settings.</p>
+  </section>
+
+  <section id="trouble">
+    <h2>Fixing common problems</h2>
+    <dl class="sets">
+      <dt>The picture stops or stutters</dt>
+      <dd>Set <strong>Settings › Playback › Buffering</strong> to Steady. It starts a little slower but copes better with weak Wi-Fi.</dd>
+      <dt>Menus feel slow</dt>
+      <dd>On slower TVs (like the Chromecast with Google TV HD), turn off <strong>Transparency</strong> and <strong>Blur Behind Menus</strong> under Appearance.</dd>
+      <dt>Sound and picture are out of step</dt>
+      <dd>Press <kbd>OK</kbd> › and use <strong>Audio delay</strong>. It's saved for that channel only.</dd>
+      <dt>Black bars round the picture</dt>
+      <dd>Press <kbd>OK</kbd> › <strong>Aspect ratio</strong> › Zoom, Wider or Taller.</dd>
+      <dt>The guide is empty or out of date</dt>
+      <dd>Check the playlist has a guide on the phone setup page, then run <strong>Settings › Playlists &amp; TV Guide › Update EPG Now</strong>. How many days you get depends on the guide file.</dd>
+      <dt>A channel won't play</dt>
+      <dd>Look in <strong>Settings › App › Error Log</strong>. Often the stream itself is down; try it again later.</dd>
+    </dl>
+  </section>
+</main>
+<footer class="wrap">
+  Made by <a href="https://github.com/hertn" target="_blank" rel="noopener">hertn</a> with Claude. <a href="./">LiteTV home</a> · <a href="https://github.com/hertn/LiteTV" target="_blank" rel="noopener">GitHub</a> · <a href="https://ko-fi.com/hertn" target="_blank" rel="noopener">Ko-fi</a>
+</footer>
+</body>
+</html>
