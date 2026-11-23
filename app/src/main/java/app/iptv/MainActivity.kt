@@ -1053,11 +1053,13 @@ class MainActivity : Activity() {
         // button can get there; a short press does OK's own job when it is let go
         val okKey = ev.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || ev.keyCode == KeyEvent.KEYCODE_ENTER
         val plHold = ui.side && ui.sideFocus == 2 && ui.plSel > 0 && ui.plMenu < 0 && ui.plAsk < 0 && (ui.mode == 1 || ui.mode == 2)   // a playlist row: hold OK picks it up to move
-        if (okKey && (okHold || plHold || ui.mode == 16 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
+        val grpHold = ui.mode == 9 && !ui.bkF   // Favorite Groups: holding OK picks up / drops like a short OK, and its key repeats can't flip it back and forth
+        if (okKey && (okHold || plHold || grpHold || ui.mode == 16 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) { okHold = true; okLong = false }
                 else if (okHold && !okLong && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true
                     if (plHold) { if (ui.plGrab) { ui.plGrab = false; ui.invalidate() } else { ui.plMenu = 0; ui.invalidate() } }   // picked up: holding OK drops it too
+                    else if (grpHold) onKeyDown(ev.keyCode, KeyEvent(KeyEvent.ACTION_DOWN, ev.keyCode))
                     else if (ui.mode == 16) ui.gridOk(true) else ui.openMenu() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
                 val short = okHold && !okLong; okHold = false; okLong = false

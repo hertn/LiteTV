@@ -1263,8 +1263,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     }
     // a page card like Reminders / Hidden Channels: sized to its rows (scrolls when they do not fit), centred down the screen,
     // notes and key hints inside the card at the bottom
+    // movable: rows 0 until movable can be reordered (like the Playlists panel: a grip on the selected one, arrows + theme outline while picked up)
     fun drawListCard(c: Canvas, w: Float, h: Float, pw: Float, title: String, count: String, items: List<String>, selI: Int, grab: Boolean,
-                     empty: String, notes: List<String>, hints: List<Pair<String, String>>) {
+                     empty: String, notes: List<String>, hints: List<Pair<String, String>>, movable: Int = 0) {
         val x = M; val ix = x + 40 * U; val iw = pw - 80 * U; val rh = 80 * U; val top = 112 * U
         val bottom = notes.size * 40 * U + (if (items.isEmpty()) 0f else 100 * U) + (if (notes.isEmpty()) 0f else 20 * U)
         val fit = maxOf(1, ((h - PT - M - top - bottom) / rh).toInt()); val nr = minOf(fit, maxOf(1, items.size))
@@ -1276,9 +1277,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val sel0 = selI.coerceIn(0, maxOf(0, items.lastIndex)); val first = maxOf(0, sel0 - fit + 1)
         for (j in first until minOf(items.size, first + fit)) {
             val y = y0 + top + (j - first) * rh; val on = j == sel0 && !bkF; val bx = x + 14 * U; val bw = pw - 28 * U; val bh = rh - 12 * U
+            val handle = if (!on || j >= movable) null else if (grab) "updown" else "grip"
             lift(c, on, bx, y, bw, bh, 1.025f) {
                 if (on) rr(c, bx, y, bw, bh, FR, FOC)
-                stxt(c, (if (grab && on) "●  " else "") + items[j], ix, y + bh / 2, iw, 31f, if (on) ONF else WHITE, if (on) 600 else 500, on)
+                if (grab && on) outline(c, bx, y, bw, bh, FR, T.accent or 0xFF000000.toInt(), 4f)
+                stxt(c, items[j], ix, y + bh / 2, iw - (if (handle != null) 50 * U else 0f), 31f, if (on) ONF else WHITE, if (on) 600 else 500, on)
+                if (handle != null) icon(c, handle, bx + bw - 40 * U, y + bh / 2, 28 * U, ONF)
             }
         }
         var ny = y0 + top + (if (items.isEmpty()) 110 * U else nr * rh) + 20 * U
@@ -1292,12 +1296,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             "No problems since the app started", emptyList(), listOf("UP / DOWN" to "scroll", "OK" to "clear the log"))   // Back needs no hint: it goes back everywhere
     }
 
-    // favorite group order (mode 9): UP / DOWN choose a group, OK grabs it, UP / DOWN then moves it, OK drops it
+    // favorite group order (mode 9): UP / DOWN choose a group, OK (or hold OK, as on Playlists) picks it up, UP / DOWN then moves it, OK drops it
     fun drawFavGroups(c: Canvas, w: Float, h: Float) {
-        val names = a.favGroupNames().map { it.second }
+        val gn = a.favGroupNames(); val names = gn.map { it.second }
         drawListCard(c, w, h, 680 * U, "Favorite Groups", if (names.isEmpty()) "" else "${names.size} groups", names, grpSel, grpGrab, "No favorites yet",
             if (names.isEmpty()) emptyList() else listOf(if (REVERSED) "Top of this list = bottom of the channel list" else "Top of this list = top of the channel list", "\"Other\" always stays last"),
-            if (grpGrab) listOf("UP / DOWN" to "move", "OK" to "drop it here") else listOf("UP / DOWN" to "choose", "OK" to "grab to move"))
+            if (grpGrab) listOf("UP / DOWN" to "move", "OK" to "drop") else listOf("OK" to "move"), gn.count { it.first != "other" })
     }
 
     // ---------- themes: a colour list (and the seasonal themes) with a preview of where the colour shows ----------

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.2
+
+Favorite Groups reorder like playlists.
+
+- Reorder Groups (Settings > Favorites) has the same grab handle as the Playlists panel instead of a dot: the selected group shows the handle, and once picked up it turns into arrows with an outline in your theme colour.
+- Hold OK picks a group up or drops it, as on Playlists; a short OK still works. The hints now read "OK move" and "Up / Down move, OK drop".
+- Fixed: holding OK on that page used to flip the group between picked up and dropped over and over.
+
 ## 2.4.1
 
 A small fix to the button bar.
