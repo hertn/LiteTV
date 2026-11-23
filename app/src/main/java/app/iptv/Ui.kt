@@ -58,6 +58,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     var mode = 0
         set(v) { if (v != field && field != 0 && v != 0 && visibility == View.VISIBLE && animOn()) { fromMode = field; fadeT0 = 0L }; if (v != field) bkF = v == 13; field = v }
     var sideLvl = 0; var sideFocus = 1; var catSel = 1; var plSel = 0   // sideLvl: 0 none, 1 categories, 2 playlists + categories
+    var plGrab = false   // a playlist picked up (hold OK) to move it with UP / DOWN; OK drops it
+    var plMenu = -1; var plAsk = -1   // the small cards beside a playlist (hold OK): Move / Remove / Cancel, then "Remove?"; the focused row, -1 = closed
+    val panTop = HashMap<String, Int>(); val panSelY = HashMap<String, Float>()   // each side panel's first shown row, and where its selected row is (for the cards)
     var shiftD = -1f; var shiftAt = 0L   // the side panels' slide: where the lists start now, eased toward their place
     var side: Boolean
         get() = sideLvl > 0
@@ -171,8 +174,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         p.shader = null; p.alpha = 255
     }
-    fun outline(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float) {
-        p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = 2 * U; p.color = OUTLINE
+    fun outline(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float, col: Int = OUTLINE, sw: Float = 2f) {
+        p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = sw * U; p.color = col
         c.drawRoundRect(RectF(x + U, y + U, x + w - U, y + h - U), r, r, p); p.style = Paint.Style.FILL
     }
     fun icon(c: Canvas, k: String, cx: Float, cy: Float, sz: Float, color: Int, accent: Boolean = false) {
@@ -432,7 +435,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (mode == 6) a.setTheme(a.themeIdx, false)   // leaving the theme list without pressing OK: drop the preview
         a.settingsDone()
         val was = mode
-        grpGrab = false; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (a.searching) a.endSearch()
+        grpGrab = false; plGrab = false; plMenu = -1; plAsk = -1; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (a.searching) a.endSearch()
         if (animOn() && visibility == View.VISIBLE && was != 0) slideOut(was) else visibility = View.GONE
         a.pip.place()
     }
@@ -444,8 +447,10 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun catActive() = if (a.grp == 0) (a.favGroupNames().indexOfFirst { it.first == a.favGrp } + 1) else maxOf(0, a.grp - 1)
     fun openSide(pl: Boolean = false) {
         sideLvl = if (pl) 2 else 1; sideFocus = if (pl) 2 else 1
-        catSel = catActive(); plSel = plActive(); touch()
+        catSel = catActive(); plSel = plActive(); touch(); if (pl) plTip()
     }
+    // the first 3 times the Playlists panel opens, a notice says what holding OK does there
+    fun plTip() { val n = a.prefs.getInt("plTip", 0); if (n < 3 && a.sources.isNotEmpty()) { a.prefs.edit().putInt("plTip", n + 1).apply(); a.flash("Playlists: hold OK on a playlist to move or remove it", 4000) } }
 
     override fun onDraw(c: Canvas) { beginShapes(this); drawScreens(c) }
     override fun onVisibilityChanged(v: View, vis: Int) { super.onVisibilityChanged(v, vis); @Suppress("SENSELESS_COMPARISON") if (a != null) a.blurLayer.invalidate() }   // a is still null while View's constructor runs
@@ -495,11 +500,35 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         } else { fromMode = 0; drawMode(c, mode, w, h, shiftD) }
         if (mode == 1 || mode == 2) {   // drawn while open or still sliding out
             val cx = shiftD - GAP - cw; val px = cx - GAP - pw
-            if (px + pw > M - GAP + 1) drawPanel(c, px, pw, h, "Playlists", plItems(), plSel, plActive(), sideFocus == 2, null, true)
+            if (px + pw > M - GAP + 1) drawPanel(c, px, pw, h, "Playlists", plItems(), plSel, plActive(), sideFocus == 2, plGrab, true,
+                if (plGrab) listOf("UP / DOWN" to "move", "OK" to "drop") else listOf("OK" to "hold for options"))
             if (cx + cw > M - GAP + 1) drawPanel(c, cx, cw, h, if (a.grp == 0) "Favorite Groups" else "Categories", catItems(), catSel, catActive(), sideFocus == 1, null, true)
+            if ((plMenu >= 0 || plAsk >= 0) && sideLvl >= 2) drawPlCard(c, px + pw + 14 * U, panSelY["Playlists"] ?: h / 2, h)
         }
         if (T.gold && animOn()) postInvalidateDelayed(66)   // the gold shimmer moves only while a screen is open
         a.snow.end()
+    }
+
+    // small card beside the selected playlist: Move / Remove / Cancel, or the "Remove?" question (starts on Cancel)
+    fun drawPlCard(c: Canvas, x: Float, cy: Float, h: Float) {
+        val ask = plAsk >= 0; val name = plItems().getOrNull(plSel) ?: ""
+        val rows = if (ask) listOf("trash" to "Remove", "x" to "Cancel") else listOf("move" to "Move", "trash" to "Remove", "x" to "Cancel")
+        val f = if (ask) plAsk else plMenu
+        val w = (if (ask) 440 else 300) * U; val rh = 72 * U; val head = if (ask) 104 * U else 0f; val ch = head + rows.size * rh + 24 * U
+        val y = (cy - head - rh / 2 - 12 * U).coerceIn(M, h - M - ch)
+        glass(c, x, y, w, ch, 28 * U)
+        if (ask) {
+            txt(c, "Remove $name?", x + 28 * U, y + 44 * U, w - 56 * U, 30f, WHITE, 700)
+            txt(c, "Favorites from it stay saved", x + 28 * U, y + 82 * U, w - 56 * U, 23f, SEC)
+        }
+        rows.forEachIndexed { k, (ic, lab) ->
+            val ry = y + head + 12 * U + k * rh; val on = k == f; val col = if (on) ONF else if (ic == "trash") 0xFFFF6961.toInt() else WHITE
+            lift(c, on, x + 12 * U, ry + 4 * U, w - 24 * U, rh - 8 * U, 1.03f) {
+                if (on) rr(c, x + 12 * U, ry + 4 * U, w - 24 * U, rh - 8 * U, FR, FOC)
+                icon(c, ic, x + 46 * U, ry + rh / 2, 28 * U, col)
+                txt(c, lab, x + 76 * U, ry + rh / 2, w - 110 * U, 29f, col, if (on) 600 else 500)
+            }
+        }
     }
 
     // ---------- channel list ----------
@@ -1007,21 +1036,29 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 
     // a full-height list panel (categories, playlists, favorite groups, error log): heading, rows, white focus, tick = in use
     // floating = a glass card 36 px from the screen edges (Categories / Playlists beside the lists)
-    fun drawPanel(c: Canvas, x: Float, pw: Float, h: Float, title: String, items: List<String>, selI: Int, activeI: Int, focused: Boolean, grab: Boolean?, floating: Boolean = false) {
+    fun drawPanel(c: Canvas, x: Float, pw: Float, h: Float, title: String, items: List<String>, selI: Int, activeI: Int, focused: Boolean, grab: Boolean?, floating: Boolean = false, hint: List<Pair<String, String>>? = null) {
         val rh = h / 11f; val rows = 10; val ins = if (floating) 12 * U else 14 * U
         if (floating) glass(c, x, M, pw, h - 2 * M) else { matRect(c, x, 0f, pw, h, 0f); fill(c, x + pw - U, 0f, U, h, HAIR) }
         hdr(c, title, x + ins + 26 * U, if (floating) M + 52 * U else rh * 0.62f - 9 * U, pw - 60 * U)
+        if (hint != null && focused && items.size <= rows - 2) keyHint(c, hint, x + ins + 26 * U, h - M - 50 * U, pw - 2 * ins - 40 * U)   // in the empty space at the foot
         if (floating) beginScroll(c, x, M, pw, h - 2 * M)
-        val top = maxOf(0, minOf(selI - 3, items.size - (if (floating) rows - 1 else rows)))   // floating: the 10th row peeks under the card edge, so the list end scrolls one further to lift the last item above it
+        // the selector moves freely; the list scrolls only to keep one row beyond it in view (floating: the 10th row peeks under the card edge)
+        val vis = if (floating) rows - 1 else rows; val maxTop = maxOf(0, items.size - vis)
+        var top = (panTop[title] ?: 0).coerceIn(0, maxTop)
+        if (selI < top + 1) top = maxOf(0, selI - 1)
+        if (selI > top + vis - 2) top = minOf(maxTop, selI - vis + 2)
+        panTop[title] = top; panSelY[title] = rh * (selI - top + 1) + rh / 2
         for (k in 0 until rows) {
             val i = top + k; val lab = items.getOrNull(i) ?: break; val y = rh * (k + 1); val on = i == selI
             val bx = x + ins; val bw = pw - 2 * ins; val bh = rh - 12 * U
             lift(c, on && focused, bx, y + 6 * U, bw, bh, 1.03f) {
                 if (on) rr(c, bx, y + 6 * U, bw, bh, FR, if (focused) FOC else SELBG)
                 val col = if (on && focused) ONF else WHITE
-                val pre = if (grab == true && on) "●  " else ""
-                stxt(c, pre + lab, bx + 26 * U, y + rh / 2, bw - 90 * U, 31f, col, if (on) 600 else 500, on && focused)
-                if (i == activeI) icon(c, "check", bx + bw - 40 * U, y + rh / 2, 28 * U, col)
+                val handle = if (!on || !focused || hint == null || i == 0) null else if (grab == true) "updown" else "grip"   // row 0 (Favorites) never moves
+                if (grab == true && on) outline(c, bx, y + 6 * U, bw, bh, FR, T.accent or 0xFF000000.toInt(), 4f)   // picked up: the theme colour round it
+                stxt(c, lab, bx + 26 * U, y + rh / 2, bw - (if (handle != null && i == activeI) 130 else 90) * U, 31f, col, if (on) 600 else 500, on && focused)
+                if (handle != null) icon(c, handle, bx + bw - 40 * U, y + rh / 2, 28 * U, col)
+                if (i == activeI) icon(c, "check", bx + bw - (if (handle != null) 84 else 40) * U, y + rh / 2, 28 * U, col)
             }
         }
         if (floating) endScroll(c)
@@ -1381,6 +1418,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         rr(c, nx + 30 * U, ny + 232 * U, 640 * U, 8 * U, 4 * U, 0x1FFFFFFF); rr(c, nx + 30 * U, ny + 232 * U, 640 * U * f, 8 * U, 4 * U, 0x73FFFFFF)
     }
 
+    // UP / DOWN in a menu list (everything but the channel lists, which have triple-tap): holding the key stops at the
+    // first / last place, a fresh press there goes round to the other end. Places run 0..n-1, plus -1 = the back button.
+    fun step(cur: Int, d: Int, n: Int, e: KeyEvent, back: Boolean): Int {
+        val lo = if (back) -1 else 0; val hi = maxOf(lo, n - 1); val nx = cur + d
+        return when { nx in lo..hi -> nx; e.repeatCount > 0 -> cur.coerceIn(lo, hi); d > 0 -> lo; else -> hi }
+    }
     override fun onKeyDown(k: Int, e: KeyEvent): Boolean {
         val up = k == KeyEvent.KEYCODE_DPAD_UP; val dn = k == KeyEvent.KEYCODE_DPAD_DOWN
         val lf = k == KeyEvent.KEYCODE_DPAD_LEFT; val rt = k == KeyEvent.KEYCODE_DPAD_RIGHT
@@ -1388,6 +1431,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (e.repeatCount == 0) okIdle = false   // any other button keeps the program info up the usual 30 s
         if (k == KeyEvent.KEYCODE_BACK) {
             when {
+                side && (plMenu >= 0 || plAsk >= 0) -> { plMenu = -1; plAsk = -1 }
+                side && plGrab -> plGrab = false
                 side -> side = false
                 mode == 4 -> { if (subOpen) subOpen = false else if (backMode == 0) close() else mode = backMode }
                 mode == 5 -> if (infoBack == 4) close() else { mode = infoBack; if (mode == 14) remSel = remSel.coerceAtLeast(0) }   // from the OK tiles: back to the picture, not the tiles
@@ -1404,8 +1449,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         if (bkF && mode in listOf(6, 8, 9, 10, 12, 13, 14, 15)) {
             if (ok) { bkF = false; return onKeyDown(KeyEvent.KEYCODE_BACK, e) }
-            if (dn && mode != 13) bkF = false
-            touch(); invalidate(); return true
+            if (!(up || dn) || mode == 13) { touch(); invalidate(); return true }   // UP / DOWN: the screen's list moves on from the back button
         }
         if (mode == 12 && rbSub == 2) {   // waiting for a button: whatever comes next is added to the selected action
             val act = keyRows().getOrNull(rbSel)?.act
@@ -1438,9 +1482,20 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (side) {
             val n = maxOf(1, if (sideFocus == 2) plItems().size else catItems().size)
             when {
-                up -> if (sideFocus == 2) plSel = (plSel + n - 1) % n else catSel = (catSel + n - 1) % n
-                dn -> if (sideFocus == 2) plSel = (plSel + 1) % n else catSel = (catSel + 1) % n
-                lf -> if (sideFocus == 1) { sideLvl = 2; sideFocus = 2; plSel = plActive() }
+                plAsk >= 0 -> when {
+                    up || dn -> plAsk = step(plAsk, if (up) -1 else 1, 2, e, false)
+                    ok -> { val id = a.sources.getOrNull(plSel - 1)?.id; val yes = plAsk == 0; plAsk = -1; if (yes && id != null) a.removePl(id) }
+                    lf -> plAsk = -1
+                }
+                plMenu >= 0 -> when {
+                    up || dn -> plMenu = step(plMenu, if (up) -1 else 1, 3, e, false)
+                    ok -> { val k = plMenu; plMenu = -1; if (k == 0) plGrab = true else if (k == 1) plAsk = 1 }
+                    lf -> plMenu = -1
+                }
+                (up || dn) && plGrab -> { val to = plSel + (if (up) -1 else 1); if (to in 1..a.sources.size) { a.movePl(plSel - 1, to - 1); plSel = to } }   // row 0 (Favorites) stays first
+                up || dn -> { val d = if (up) -1 else 1; if (sideFocus == 2) plSel = step(plSel, d, n, e, false) else catSel = step(catSel, d, n, e, false) }
+                plGrab -> if (ok) plGrab = false   // OK drops it; LEFT / RIGHT do nothing while it is held
+                lf -> if (sideFocus == 1) { sideLvl = 2; sideFocus = 2; plSel = plActive(); plTip() }
                 rt -> if (sideFocus == 2) { sideLvl = 1; sideFocus = 1 } else sideLvl = 0
                 ok -> if (sideFocus == 2) {
                     if (plSel == 0) { a.favGrp = null; a.selectGroup(0) }
@@ -1458,12 +1513,12 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             }
         } else if (mode == 3) {
             val n = a.menuItems().size
-            when { up -> menuSel = (menuSel + n - 1) % n; dn -> menuSel = (menuSel + 1) % n; ok -> a.menuAct(menuSel) }
+            when { up || dn -> menuSel = step(menuSel, if (up) -1 else 1, n, e, false); ok -> a.menuAct(menuSel) }
         } else if (mode == 4) {
             val n = if (subI == -1) 3 else if (subI < 0) 0 else a.subOpts(subI).first.size
             when {
-                up -> if (subOpen && subI == -1) oj = maxOf(0, oj - 1) else if (subOpen) oj = (oj + dir).coerceIn(0, maxOf(0, n - 1)) else if (backMode == 0) a.zap(dir)
-                dn -> if (subOpen && subI == -1) oj = minOf(n - 1, oj + 1) else if (subOpen) oj = (oj - dir).coerceIn(0, maxOf(0, n - 1)) else if (backMode == 0) a.zap(-dir)
+                up -> if (subOpen && subI == -1) oj = step(oj, -1, n, e, false) else if (subOpen) oj = step(oj, dir, n, e, false) else if (backMode == 0) a.zap(dir)
+                dn -> if (subOpen && subI == -1) oj = step(oj, 1, n, e, false) else if (subOpen) oj = step(oj, -dir, n, e, false) else if (backMode == 0) a.zap(-dir)
                 lf -> if (quickHide && backMode == 0) open(1) else if (!subOpen) { subI = maxOf(if (backMode == 0) -3 else 0, subI - 1) } else if (subI == 3) oj = maxOf(0, oj - a.AVD_JUMP)
                 rt -> if (quickHide && backMode == 0) open(2) else if (!subOpen) { subI = minOf(3, subI + 1) } else if (subI == 3) oj = minOf(n - 1, oj + a.AVD_JUMP)
                 ok -> if (quickHide && a.held() && backMode == 0) a.pinFull()   // the "pinned" notice: OK watches it full screen
@@ -1498,8 +1553,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         } else if (mode == 8) {
             val n = if (setCat < 0) SET_CATS.size else SET_CATS[setCat].rows.size
             when {
-                up -> if (setSel == 0) bkF = true else setSel -= 1   // above the first row: the back button
-                dn -> setSel = (setSel + 1) % n
+                up || dn -> { val r = step(if (bkF) -1 else setSel, if (up) -1 else 1, n, e, true); bkF = r < 0; if (r >= 0) setSel = r }   // -1: the back button
                 setCat < 0 -> if (ok || rt) { if (SET_CATS[setSel].rows.size == 1) a.settingAct(SET_CATS[setSel].rows[0], 1) else { setCat = setSel; setSel = 0; bkF = false } }   // Remote Buttons opens its page
                 else -> { val i = SET_CATS[setCat].rows[setSel.coerceIn(0, n - 1)]; if (lf) a.settingAct(i, -1) else if (rt || ok) a.settingAct(i, 1) }
             }
@@ -1509,8 +1563,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 up || dn -> {
                     val dl = if (up) -1 else 1
                     if (grpGrab) { val to = grpSel + dl; if (to in 0 until mv) { a.moveFavGroup(grpSel, to); grpSel = to } }
-                    else if (up && grpSel <= 0) bkF = true
-                    else if (n > 0) grpSel = (grpSel + dl + n) % n
+                    else { val r = step(if (bkF) -1 else grpSel, dl, n, e, true); bkF = r < 0; if (r >= 0) grpSel = r }
                 }
                 ok -> if (grpSel < mv) grpGrab = !grpGrab
             }
@@ -1518,8 +1571,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val rows = keyRows(); val r = rows.getOrNull(rbSel)
             when {
                 (up || dn) && rbSub == 1 -> rbOpt = 1 - rbOpt
-                up -> if (rbSel == 0) bkF = true else rbSel -= 1
-                dn -> rbSel = minOf(rbSel + 1, rows.lastIndex)   // stops at the bottom, like UP stops at the back button
+                up || dn -> { val r = step(if (bkF) -1 else rbSel, if (up) -1 else 1, rows.size, e, true); bkF = r < 0; if (r >= 0) rbSel = r }
                 ok && rbSub == 1 -> if (rbOpt == 0) rbSub = 2 else { a.keys.reset(r?.act); a.flash("${r?.label} reset", 2000); rbSub = 0 }
                 ok && r?.reset == true -> { a.keys.reset(null); a.flash("All buttons reset", 2000) }
                 ok && r?.act != null -> { rbSub = 1; rbOpt = 0 }
@@ -1533,8 +1585,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 lf -> if (hidSel % HID_COLS > 0) hidSel--
                 rt -> if (hidSel % HID_COLS < HID_COLS - 1 && hidSel + 1 < hs.size) hidSel++
-                up -> if (hidSel >= HID_COLS) hidSel -= HID_COLS else bkF = true
-                dn -> if (hidSel + HID_COLS < hs.size) hidSel += HID_COLS else if (hidSel / HID_COLS < (hs.size - 1) / HID_COLS) hidSel = hs.size - 1   // short last row: go to its last logo
+                up -> if (bkF) { if (e.repeatCount == 0 && hs.isNotEmpty()) { bkF = false; hidSel = hs.size - 1 } }   // round to the last logo
+                    else if (hidSel >= HID_COLS) hidSel -= HID_COLS else bkF = true
+                dn -> if (bkF) { bkF = false; hidSel = 0 }
+                    else if (hidSel + HID_COLS < hs.size) hidSel += HID_COLS else if (hidSel / HID_COLS < (hs.size - 1) / HID_COLS) hidSel = hs.size - 1   // short last row: go to its last logo
+                    else if (e.repeatCount == 0) bkF = true   // the last row: a fresh press goes round to the back button
                 ok -> hs.getOrNull(hidSel)?.let { a.unhide(it); hidSel = hidSel.coerceIn(0, maxOf(0, hs.size - 2)) }
             }
         } else if (mode == 14) {
@@ -1543,17 +1598,16 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 lf -> if (remDay > 0) { remDay--; remSel = 0 }
                 rt -> if (remDay < ds.lastIndex) { remDay++; remSel = 0 }
-                up -> if (remSel <= 0) bkF = true else remSel -= 1; dn -> remSel = minOf(maxOf(0, day.size - 1), remSel + 1)
+                up || dn -> { val r = step(if (bkF) -1 else remSel.coerceAtLeast(0), if (up) -1 else 1, day.size, e, true); bkF = r < 0; if (r >= 0) remSel = r }
                 ok -> day.getOrNull(remSel)?.let { r -> r.ch?.let { openInfo(it, r.prog) } ?: run { a.removeRem(r.key); remSel = 0 } }   // channel gone from the playlists: OK just removes it
             }
         } else if (mode == 10) {
             val n = a.errLog.size
-            when { up -> if (logSel <= 0) bkF = true else logSel -= 1; dn -> logSel = minOf(maxOf(0, n - 1), logSel + 1); ok -> { a.errLog.clear(); logSel = 0 } }
+            when { up || dn -> { val r = step(if (bkF) -1 else logSel, if (up) -1 else 1, n, e, true); bkF = r < 0; if (r >= 0) logSel = r }; ok -> { a.errLog.clear(); logSel = 0 } }
         } else if (mode == 6) {
             val n = THEMES.size
             when {
-                up -> if (themeSel == 0) bkF = true else { themeSel -= 1; a.setTheme(themeSel, false) }   // moving through the list previews each theme live
-                dn -> { themeSel = (themeSel + 1) % n; a.setTheme(themeSel, false) }
+                up || dn -> { val r = step(if (bkF) -1 else themeSel, if (up) -1 else 1, n, e, true); bkF = r < 0; if (r >= 0 && r != themeSel) { themeSel = r; a.setTheme(themeSel, false) } }   // moving through the list previews each theme live
                 ok -> a.setTheme(themeSel, true)
             }
         } else if (mode == 1) {

@@ -357,6 +357,23 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    // playlist order, changed on the TV (hold OK in the Playlists panel); the same playlist stays active
+    fun movePl(from: Int, to: Int) {
+        if (from !in sources.indices || to !in sources.indices || from == to) return
+        val curId = sources.getOrNull(act)?.id; val l = sources.toMutableList(); l.add(to, l.removeAt(from))
+        sources = l; act = maxOf(0, l.indexOfFirst { it.id == curId }); prefs.edit().putInt("act", act).apply(); saveSrcs(l)
+    }
+    // removes a playlist and its own EPG; favorites are kept by address, so they come back with the playlist
+    fun removePl(id: String) {
+        val s = sources.firstOrNull { it.id == id } ?: return
+        val curId = sources.getOrNull(act)?.id
+        val l = sources.filter { it.id != id }; val e = epgs.filter { it.owner != id }
+        sources = l; epgs = e; saveSrcs(l); saveEpgs(e)
+        flash("Removed: ${s.name}", 2500)
+        if (l.isEmpty()) { ui.close(); settings(); return }
+        if (curId == id) activate(0, true) else { act = maxOf(0, l.indexOfFirst { it.id == curId }); prefs.edit().putInt("act", act).apply() }
+        ui.plSel = ui.plSel.coerceIn(0, l.size); ui.invalidate()
+    }
     fun activate(i: Int, refresh: Boolean, boot: Boolean = false, keepFav: Boolean = false) {
         if (sources.isEmpty()) return
         act = i.coerceIn(0, sources.lastIndex); prefs.edit().putInt("act", act).apply()
@@ -1035,10 +1052,13 @@ class MainActivity : Activity() {
         // while watching (or on the overlay after a channel change) holding OK opens the main menu, so remotes without a Menu
         // button can get there; a short press does OK's own job when it is let go
         val okKey = ev.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || ev.keyCode == KeyEvent.KEYCODE_ENTER
-        if (okKey && (okHold || ui.mode == 16 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
+        val plHold = ui.side && ui.sideFocus == 2 && ui.plSel > 0 && ui.plMenu < 0 && ui.plAsk < 0 && (ui.mode == 1 || ui.mode == 2)   // a playlist row: hold OK picks it up to move
+        if (okKey && (okHold || plHold || ui.mode == 16 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0))))) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) { okHold = true; okLong = false }
-                else if (okHold && !okLong && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true; if (ui.mode == 16) ui.gridOk(true) else ui.openMenu() }
+                else if (okHold && !okLong && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true
+                    if (plHold) { if (ui.plGrab) { ui.plGrab = false; ui.invalidate() } else { ui.plMenu = 0; ui.invalidate() } }   // picked up: holding OK drops it too
+                    else if (ui.mode == 16) ui.gridOk(true) else ui.openMenu() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
                 val short = okHold && !okLong; okHold = false; okLong = false
                 if (short) onKeyDown(ev.keyCode, KeyEvent(KeyEvent.ACTION_DOWN, ev.keyCode))
@@ -1048,7 +1068,10 @@ class MainActivity : Activity() {
         if (ev.keyCode == KeyEvent.KEYCODE_BACK) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) backLong = false
-                else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true; if (pip.ch != null) { unpin(); flash("Unpinned: hold BACK again to exit the app", 3000) } else exitApp() }   // with a pin, the first hold only unpins
+                else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true   // holding BACK: first every menu closes at once, then the pin goes, then the app exits
+                    if (ui.mode != 0) ui.close()
+                    else if (catchupProg != null && catchupBar.visibility == View.VISIBLE) catchupBar.close()
+                    else if (pip.ch != null) { unpin(); flash("Unpinned: hold BACK again to exit the app", 3000) } else exitApp() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
                 if (!backLong) backShort(ev)
                 backLong = false

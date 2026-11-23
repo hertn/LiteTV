@@ -18,7 +18,7 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 ## Features
 
 - A clean, Apple TV-style look: dark glass menus over the picture (blurred on TVs that can do it), big clear text and white focus
-- Live channels from one or more M3U playlists, with quick switching between playlists
+- Live channels from one or more M3U playlists, with quick switching between playlists; reorder or remove playlists right on the TV (hold OK on one)
 - TV guide (EPG): what's on now with minutes left, a TV Guide grid with every channel across a timeline, a Quick Guide by day for one channel at a time, and a full program info page with what's on later
 - Reminders that repeat: press "Remind Me" on a show once and every airing at that time gets one, until you remove it. LiteTV offers to switch when it starts, and the Reminders page lists what's coming
 - Guide stored on disk instead of RAM, so memory use stays low even with long guides
@@ -104,7 +104,7 @@ You can also use **Add Playlist Here** on the TV to type a playlist in with the 
 | Up / Down, CH+ / CH- | Change channel |
 | 0-9 | Type a channel number |
 | Back | Go to the last channel (or step back in menus) |
-| Hold Back | Exit the app completely |
+| Hold Back | Close all menus at once; with nothing open, unpin a pinned channel, then exit the app |
 
 You can add your own buttons to any of these in **Remote Buttons**, in Settings.
 

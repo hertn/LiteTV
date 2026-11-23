@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.4.0
+
+Manage playlists on the TV, menus that scroll the same way everywhere, and Back that gets you out fast.
+
+**Playlists on the TV**
+
+- Hold OK on a playlist in the Playlists panel for a small card beside it: **Move**, **Remove** or **Cancel**.
+- Move picks the playlist up (a grab handle turns into arrows): Up / Down moves it, OK drops it. Each move is saved and the playlist you are on stays active.
+- Remove asks first and starts on Cancel. Favorites from a removed playlist stay saved and come back if you add it again.
+- The Playlists panel shows the grab handle on the selected playlist, a hint at its foot, and a notice the first few times it opens.
+
+**Menus**
+
+- Every menu list works the same way: holding Up or Down scrolls to the end and stops; pressing again there goes round to the other end. The round Back button counts as the top. (The channel list and guides keep their triple-tap jump.)
+- The Playlists and Categories panels scroll smoothly: the highlight moves freely and the list only scrolls at the edge, instead of sticking a few rows down.
+- **Hold Back** now closes every open menu at once, wherever you are. With nothing open it unpins a pinned channel, and only then exits the app.
+- The Themes preview text now matches what seasonal themes really change.
+
 ## 2.3.0
 
 Pin a channel to the corner, seasonal themes that come alive, and simpler Settings.

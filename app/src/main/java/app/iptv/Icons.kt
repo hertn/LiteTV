@@ -11,6 +11,10 @@ val ICON_SRC: Map<String, List<Pair<String, Boolean>>> = mapOf(
     "layers" to listOf("M15 9V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h3" to false, "M12 9h6a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3z" to false),   // one card over another
     "bug" to listOf("M12 6a5.25 5.25 0 0 1 5.25 5.25v3.75a5.25 5.25 0 0 1 -10.5 0v-3.75a5.25 5.25 0 0 1 5.25 -5.25z" to false, "M3 11.25h3.75M17.25 11.25h3.75M3.75 17.25l3-1.5M20.25 17.25l-3-1.5M9 3.75l1.5 2.25M15 3.75l-1.5 2.25" to false),
     "x" to listOf("M6 6l12 12M18 6L6 18" to false),
+    "grip" to listOf("M7.4 6a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0zM13.4 6a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0zM7.4 12a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0zM13.4 12a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0zM7.4 18a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0zM13.4 18a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0z" to true),   // a grab handle: this row can be moved
+    "updown" to listOf("M12 3l5 6H7zM12 21l5-6H7z" to true),   // picked up: UP / DOWN move it
+    "move" to listOf("M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" to false),
+    "trash" to listOf("M4 7h16M10 7V4.5h4V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6" to false),
     "plus" to listOf("M12 5v14M5 12h14" to false),
     "back" to listOf("M14.5 6l-6 6 6 6" to false),   // the remote's Back button
     "search" to listOf("M4.0 10.5a6.5 6.5 0 1 0 13.0 0a6.5 6.5 0 1 0 -13.0 0z" to false, "M15.5 15.5L21 21" to false),
