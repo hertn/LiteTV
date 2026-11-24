@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.3
+
+OK no longer races through menus when you hold it.
+
+- Fixed: holding OK in a menu used to keep pressing it, opening one screen after another. OK now acts once, when you let go.
+- The selected item now shows when OK is pressed: it sinks back a little while you hold the button, and springs up when you let go, like on Apple TV. With animations turned off in the TV's settings it changes without moving.
+
 ## 2.4.2
 
 Favorite Groups reorder like playlists.

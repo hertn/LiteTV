@@ -80,7 +80,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     // every key press (and every screen change) restarts the idle timer; the screens close themselves after 30 s of nothing
     val idle = Runnable { if (mode != 0) close() }
     var quickHide = false   // channel settings shown by a channel change: hides after 5 s unless a tile is used
-    var okIdle = false      // program info opened with OK from the video: hides after 5 s until another button is pressed
+    var okDown = false      // OK is held down: the focused item draws pressed (MainActivity.dispatchKeyEvent)
+    var okIdle = false     // program info opened with OK from the video: hides after 5 s until another button is pressed
     fun touch() { selSince = SystemClock.uptimeMillis(); removeCallbacks(idle); if (mode != 0 && mode != 11) postDelayed(idle, if ((quickHide || okIdle) && mode == 4) 5000L else 30000L) }
     fun rowH() = height * ROW_SCALE / 7.5f
     var tapK = 0; var tapN = 0; var tapAt = 0L   // quick-tap counter for the list's jump to top / bottom
@@ -300,9 +301,20 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         tp.textSize = tsz(sz); tp.typeface = REG; tp.color = color; tp.shader = null; tp.textAlign = Paint.Align.LEFT
         val sl = fitText(s, w.toInt(), h, spacing); c.save(); c.translate(x, y); sl.draw(c); c.restore()
     }
+    // OK held = the focused item sinks most of the way back toward the page and its shadow shrinks, then springs up with a
+    // small bounce when let go (tvOS press). pressV runs 0..1 on a slightly underdamped spring, stepped once per frame in onDraw
+    var pressV = 0f; var pressVel = 0f; var pressAt = 0L
+    fun stepPress(now: Long) {
+        val t = if (okDown) 1f else 0f
+        if (!animOn()) { pressV = t; pressVel = 0f; pressAt = now; return }
+        val dt = if (pressAt == 0L) 0f else minOf(0.032f, (now - pressAt) / 1000f); pressAt = now
+        pressVel += (900f * (t - pressV) - 42f * pressVel) * dt; pressV += pressVel * dt
+        if (Math.abs(t - pressV) < 0.002f && Math.abs(pressVel) < 0.05f) { pressV = t; pressVel = 0f } else postInvalidateOnAnimation()
+    }
     // the focused item grows a little (tvOS focus); draw it inside this
     inline fun lift(c: Canvas, on: Boolean, x: Float, y: Float, w: Float, h: Float, sc: Float, px: Float = x + w / 2, body: () -> Unit) {
-        if (on) { c.save(); c.scale(sc, sc, px, y + h / 2); rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, FR, 0x40000000) }
+        if (on) { c.save(); val s = sc - (sc - 1f) * 0.7f * pressV; c.scale(s, s, px, y + h / 2)
+            rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, FR, ((0x40 * (1f - 0.7f * pressV.coerceIn(0f, 1f))).toInt() shl 24)) }
         body(); if (on) c.restore()
     }
     // white focus pill (or a faint one) with an icon and a label, used for every button row
@@ -491,7 +503,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val k = 1f - Math.exp(-minOf(tNow - shiftAt, 50L) / 70.0).toFloat()
             shiftD += (shift - shiftD) * k; if (Math.abs(shift - shiftD) < 0.5f) shiftD = shift else postInvalidateOnAnimation()
         }
-        shiftAt = tNow
+        shiftAt = tNow; stepPress(tNow)
         if (fromMode != 0 && fadeT0 == 0L) fadeT0 = SystemClock.uptimeMillis()
         val ft = if (fromMode != 0) (SystemClock.uptimeMillis() - fadeT0) / 240f else 1f
         if (ft < 1f) {   // crossfade: the old screen fades out (without blur behind it), the new one fades in
