@@ -730,7 +730,7 @@ class MainActivity : Activity() {
     }
 
     // main menu (OK button); the number is the icon id
-    fun menuItems() = listOf("search" to "Search", "phone" to "Playlists", "grid" to "TV Guide", "bell" to "Reminders", "hide" to "Hidden Channels", "gear" to (if (updState == 3 || updState == 5) "Settings  \u25CF Update" else "Settings"))
+    fun menuItems() = listOf("search" to "Search", "phone" to "Playlists", "grid" to "TV Guide", "bell" to "Reminders", "hide" to "Hidden Channels", "gear" to "Settings")   // an update shows as a badge on Settings (Ui.drawMenu)
 
     fun menuAct(i: Int) {
         when (i) {

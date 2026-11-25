@@ -5,6 +5,7 @@ package app.iptv
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ComposeShader
 import android.graphics.ColorMatrixColorFilter
@@ -270,6 +271,20 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     fun live(c: Canvas, x: Float, cy: Float, sz: Float): Float {
         val w = tw("LIVE", sz, 700) + 18 * U; val h = sz * U * 1.55f
         rr(c, x, cy - h / 2, w, h, 6 * U, LIVE_RED); txt(c, "LIVE", x + 9 * U, cy, w, sz, WHITE, 700); return w
+    }
+    // "Update" capsule at the right end of the Settings row, like a tvOS/iOS notification badge, in the theme's colour; returns its width
+    fun updBadge(c: Canvas, right: Float, cy: Float, on: Boolean): Float {
+        val w = tw("Update", 22f, 700) + 28 * U; val h = 38 * U; val acc = T.accent or 0xFF000000.toInt()
+        val light = (0.299f * Color.red(acc) + 0.587f * Color.green(acc) + 0.114f * Color.blue(acc)) > 140   // yellow, orange, teal, green, gold: dark text
+        // on a coloured focus (Christmas, Halloween, New Year's gold) the badge would vanish, so it flips: white (gold: dark) with the colour as text
+        val (bg, fg) = when {
+            on && T.party -> 0xFF1C1C1E.toInt() to acc
+            on && T.redFocus -> WHITE to acc
+            T.party -> GOLDF to 0xFF1C1C1E.toInt()
+            else -> acc to (if (light) 0xFF1C1C1E.toInt() else WHITE)
+        }
+        rr(c, right - w, cy - h / 2, w, h, h / 2, bg)
+        txt(c, "Update", right - w / 2, cy, w, 22f, fg, 700, Paint.Align.CENTER); return w
     }
     fun tile(c: Canvas, ch: Ch, x: Float, y: Float, w: Float, h: Float, bg: Int = FILL) { rr(c, x, y, w, h, 10 * U, bg); drawLogo(c, ch, x, y, w, h) }
     fun drawLogo(c: Canvas, ch: Ch, x: Float, y: Float, w: Float, h: Float) {
@@ -856,7 +871,9 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 if (on) rr(c, bx, top, bw, ih, FR, FOC)
                 val col = if (on) ONF else WHITE
                 icon(c, it.first, bx + 43 * U, top + ih / 2, 34 * U, col)
-                stxt(c, it.second, bx + 86 * U, top + ih / 2, bw - 110 * U, 34f, col, if (on) 600 else 500, on)
+                var lw = bw - 110 * U
+                if (it.first == "gear" && (a.updState == 3 || a.updState == 5)) lw -= updBadge(c, bx + bw - 24 * U, top + ih / 2, on) + 16 * U
+                stxt(c, it.second, bx + 86 * U, top + ih / 2, lw, 34f, col, if (on) 600 else 500, on)
             }
         }
         // now playing (display only)

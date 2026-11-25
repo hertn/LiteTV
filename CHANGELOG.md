@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.4
+
+A clearer update badge and a deeper Christmas red.
+
+- When an update is waiting, the Settings row in the main menu now shows a rounded "Update" badge in your theme colour, like on Apple TV, instead of "● Update" after the name. When Settings is selected, the badge flips colour so it stays visible.
+- The Christmas theme's red is now a deeper, richer red (it looked pale before). White text on it is also easier to read.
+
 ## 2.4.3
 
 OK no longer races through menus when you hold it.

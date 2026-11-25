@@ -16,8 +16,8 @@ fun blend(a: Int, b: Int, f: Float): Int {
     return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
 }
 
-// accents are Apple's dark-mode system colours; Christmas uses Apple's higher-contrast red so it stays readable on the
-// selected row and is not the same red as the LIVE badge
+// accents are Apple's dark-mode system colours; Christmas uses a dark Christmas red (white text on it 5.8:1) so it reads as Christmas,
+// not pale, and is darker than the LIVE badge red
 val THEMES = listOf(
     Theme("Purple", 0xFFBF5AF2.toInt()),
     Theme("Blue", 0xFF0A84FF.toInt()),
@@ -27,7 +27,7 @@ val THEMES = listOf(
     Theme("Orange", 0xFFFF9F0A.toInt()),
     Theme("Pink", 0xFFFF375F.toInt()),
     Theme("Graphite", 0xFF8E8E93.toInt()),
-    Theme("Christmas", 0xFFFF6961.toInt(), 0xFF0D2A1B.toInt(), 0.72f, seasonal = true, redFocus = true, snow = true),   // red focus, garland on the main menu, falling snow
+    Theme("Christmas", 0xFFC91516.toInt(), 0xFF0D2A1B.toInt(), 0.72f, seasonal = true, redFocus = true, snow = true),   // red focus, garland on the main menu, falling snow
     Theme("Halloween", 0xFF30D158.toInt(), 0xFF1E0E30.toInt(), 0.65f, seasonal = true, redFocus = true, spooky = true),
     Theme("New Year", 0xFFE8C66A.toInt(), 0xFF0A0A0A.toInt(), 0.72f, seasonal = true, gold = true, party = true)
 )
