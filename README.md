@@ -24,7 +24,8 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 - Guide stored on disk instead of RAM, so memory use stays low even with long guides
 - Guide refresh setting (manual, every 6, 12, 24 or 48 hours) and an "Update guide now" button
 - Guide length setting (2 to 14 days, limited by what your guide file contains)
-- Favorites, hidden channels (unhide them on the Hidden Channels page), and search across all playlists
+- Search like on Apple TV: results as you type, rows of channels and shows with their pictures, voice search with the remote's mic, and letters with accents (hold OK)
+- Favorites and hidden channels (unhide them on the Hidden Channels page)
 - The channel list goes round: past the last channel it starts again from the first, with a line marking where
 - Pin a channel: it keeps playing muted in a corner while you watch another (handy for waiting out an ad break), and one button swaps the two
 - Audio track, subtitles, aspect ratio (Fit, Zoom, Wider, Taller, for shows with black bars) and audio delay per channel (to fix out-of-sync sound)
@@ -43,6 +44,10 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
   <tr>
     <td width="50%" align="center" valign="top"><img src="docs/channels.jpg" width="100%" alt="The channel list over a playing show: channel logos, the show on now with its time and progress, a round-arrow line where the list starts over, and a button bar with Watch, TV Guide, Program Info, Channel Settings, Add to Favorites and Hide Channel"><br><b>Channel list</b></td>
     <td width="50%" align="center" valign="top"><img src="docs/tv-guide.jpg" width="100%" alt="The TV Guide grid: the selected show on top, then channels down the side and their shows across a two-hour timeline, with a line at the current time and the played part of each live show shaded"><br><b>TV Guide</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img src="docs/search.jpg" width="100%" alt="Search: a big search field with the words typed, one row of letters with the selected one in white, and rows of results: channel cards in their logo colours, shows on now with their pictures and progress, and shows later with their day and time"><br><b>Search</b></td>
+    <td width="50%" align="center" valign="top"><img src="docs/search-results.jpg" width="100%" alt="Search results: rows of On Now shows with their pictures, LIVE badges, progress and minutes left, with the selected card bigger, and Later shows with their day and time"><br><b>Search results</b></td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="top"><img src="docs/guide.jpg" width="100%" alt="The Quick Guide: date pills with Today in white, a column of channel logos, the shows on Comedy Central by time, and a card with the live show's description"><br><b>Quick Guide</b></td>
@@ -106,7 +111,7 @@ You can also use **Add Playlist Here** on the TV to type a playlist in with the 
 | Guide / Blue | Open the TV Guide grid |
 | Up / Down, CH+ / CH- | Change channel |
 | 0-9 | Type a channel number |
-| Back | Go to the last channel (or step back in menus) |
+| Back | Go to the last channel (or step back in menus; in Search, delete a letter) |
 | Hold Back | Close all menus at once; with nothing open, unpin a pinned channel, then exit the app |
 
 You can add your own buttons to any of these in **Remote Buttons**, in Settings.

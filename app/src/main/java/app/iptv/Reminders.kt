@@ -11,7 +11,10 @@ fun remTitle(t: String) = t.replace(EPISODE, "").trim()   // "Reeturid (1/8)" an
 fun remKey(c: Ch, p: Prog) = c.url + "\t" + remTod(p.start) + "\t" + remTitle(p.title)
 
 // older versions saved one airing ("url \t start time in ms \t title"): read as the show it belongs to
-fun MainActivity.reminders(): Set<String> = (prefs.getStringSet("rem", emptySet()) ?: emptySet()).mapTo(HashSet()) { k ->
+// read on every frame by the guide and Search, so the set is rebuilt only when the saved one changes (prefs hands back a new set on every save)
+private var remRaw: Set<String>? = null; private var remSet: Set<String> = emptySet()
+fun MainActivity.reminders(): Set<String> { val raw = prefs.getStringSet("rem", emptySet()) ?: emptySet(); if (raw !== remRaw) { remSet = reminders0(raw); remRaw = raw }; return remSet }
+private fun MainActivity.reminders0(raw: Set<String>): Set<String> = raw.mapTo(HashSet()) { k ->
     val f = k.split('\t'); val t = f.getOrNull(1)?.toLongOrNull()
     if (t != null && t > 1440) f[0] + "\t" + remTod(t) + "\t" + remTitle(f.getOrElse(2) { "" }) else k
 }

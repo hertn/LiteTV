@@ -69,6 +69,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     var sel = 0; var oi = 0; var col = 1; var dayI = 0; var progI = 0; var menuSel = 0
     var subI = 0; var subOpen = false; var oj = 0
     var setCat = -1   // Settings: -1 = the categories, else the category open (SET_CATS)
+    val srch = SearchState()   // the Search page (Search.kt)
     var themeSel = 0; var setSel = 0; var grpSel = 0; var grpGrab = false; var logSel = 0; var remSel = 0; var remDay = 0; var hidSel = 0
     var infoRow = 0; var laterSel = 0   // Program Info: 0 = the buttons, 1 = the "Later on" shows (OK sets / removes a reminder)
     var infoCh: Ch? = null; var infoProg: Prog? = null; var backMode = 1; var infoBtn = 0; var infoBack = 1   // infoBack: the screen BACK returns to from Program Info
@@ -147,11 +148,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         val off = if (el <= 0) 0f else minOf(over, el * 0.1f * U)
         tp.color = color; tp.shader = null; tp.textAlign = Paint.Align.LEFT
         c.save(); c.clipRect(x, cy - tsz(sz), x + maxW, cy + tsz(sz)); c.drawText(s, x - off, cy + tsz(sz) * 0.36f, tp); c.restore()
-        if (off < over) postInvalidateOnAnimation() else if (el <= 0) postInvalidateDelayed(-el + 16)
+        if (off < over) postInvalidateOnAnimation() else if (el <= 0) tick(-el + 16)
     }
     fun fill(c: Canvas, x: Float, y: Float, w: Float, h: Float, color: Int) { p.shader = null; if (color == GOLDF && T.party) { sparkle(c) { c.drawRect(x, y, x + w, y + h, it) }; return }; p.color = color; c.drawRect(x, y, x + w, y + h, p) }
-    fun rr(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float, color: Int) {
-        p.shader = null; p.style = Paint.Style.FILL
+    fun rr(c: Canvas, x0: Float, y0: Float, w: Float, h: Float, r: Float, color: Int) {
+        val g = (gDx != 0f || gDy != 0f) && gOff(x0, y0, w); val x = if (g) x0 + gDx else x0; val y = if (g) y0 + gDy else y0; p.shader = null; p.style = Paint.Style.FILL
         if (color == GOLDF && T.party) { goldRR.set(x, y, x + w, y + h); sparkle(c) { c.drawRoundRect(goldRR, r, r, it) }; return }
         p.color = color; c.drawRoundRect(RectF(x, y, x + w, y + h), r, r, p)
     }
@@ -176,8 +177,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         }
         p.shader = null; p.alpha = 255
     }
-    fun outline(c: Canvas, x: Float, y: Float, w: Float, h: Float, r: Float, col: Int = OUTLINE, sw: Float = 2f) {
-        p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = sw * U; p.color = col
+    fun outline(c: Canvas, x0: Float, y0: Float, w: Float, h: Float, r: Float, col: Int = OUTLINE, sw: Float = 2f) {
+        val g = (gDx != 0f || gDy != 0f) && gOff(x0, y0, w); val x = if (g) x0 + gDx else x0; val y = if (g) y0 + gDy else y0; p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = sw * U; p.color = col
         c.drawRoundRect(RectF(x + U, y + U, x + w - U, y + h - U), r, r, p); p.style = Paint.Style.FILL
     }
     fun icon(c: Canvas, k: String, cx: Float, cy: Float, sz: Float, color: Int, accent: Boolean = false) {
@@ -187,7 +188,14 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 
     // accent colour; New Year = polished gold whose highlight sweeps across the screen every 4 s (still when animations are off)
     val goldM = Matrix(); var goldSh: LinearGradient? = null; var goldW = 0
-    fun animOn() = try { android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f } catch (e: Exception) { true }
+    // one delayed redraw at a time: asking for one on every frame used to start a new chain each frame, and they piled up
+    private var tickAt = 0L
+    private val tickR = Runnable { tickAt = 0L; invalidate() }
+    fun tick(ms: Long) { val t = SystemClock.uptimeMillis() + ms; if (tickAt != 0L && tickAt <= t) return; removeCallbacks(tickR); tickAt = t; postDelayed(tickR, ms) }
+    // the system animation setting, read once a second at most (it is a settings lookup, and it was asked many times a frame)
+    private var animAt = 0L; private var animV = true
+    fun animOn(): Boolean { val n = SystemClock.uptimeMillis(); if (n - animAt > 1000) { animAt = n; animV = animOn0() }; return animV }
+    fun animOn0() = try { android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f } catch (e: Exception) { true }
     fun accentPaint(pt: Paint) {
         if (!T.gold) { pt.shader = null; pt.color = T.accent; return }
         if (goldSh == null || goldW != width) {
@@ -327,14 +335,57 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (Math.abs(t - pressV) < 0.002f && Math.abs(pressVel) < 0.05f) { pressV = t; pressVel = 0f } else postInvalidateOnAnimation()
     }
     // the focused item grows a little (tvOS focus); draw it inside this
-    inline fun lift(c: Canvas, on: Boolean, x: Float, y: Float, w: Float, h: Float, sc: Float, px: Float = x + w / 2, body: () -> Unit) {
-        if (on) { c.save(); val s = sc - (sc - 1f) * 0.7f * pressV; c.scale(s, s, px, y + h / 2)
-            rr(c, x + 2 * U, y + 10 * U, w - 4 * U, h, FR, ((0x40 * (1f - 0.7f * pressV.coerceIn(0f, 1f))).toInt() shl 24)) }
-        body(); if (on) c.restore()
+    // seasonal themes have no shadow: on their tinted menus it showed as a dark smudge (neutral themes hide it)
+    // base = the item's own unfocused fill: kept under it while the highlight is still sliding there (button bars lost their grey)
+    inline fun lift(c: Canvas, on: Boolean, x: Float, y: Float, w: Float, h: Float, sc: Float, px: Float = x + w / 2, base: Int = 0, body: () -> Unit) {
+        if (on) { glide(x, y, w, h); val dx = gDx; val dy = gDy; gDx = 0f; gDy = 0f
+            if (base != 0 && (dx != 0f || dy != 0f)) rr(c, x, y, w, h, FR, base)
+            c.save(); val s = 1f + (sc - 1f) * gK - (sc - 1f) * 0.7f * pressV; c.scale(s, s, px + dx, y + dy + h / 2)
+            if (!T.seasonal) rr(c, x + dx + 2 * U, y + dy + 10 * U, w - 4 * U, h, FR, ((0x40 * (1f - 0.7f * pressV.coerceIn(0f, 1f))).toInt() shl 24))
+            gRx = x; gRy = y; gRw = w; gDx = dx; gDy = dy }
+        body(); if (on) { c.restore(); gDx = 0f; gDy = 0f }
     }
+    // focus glide: when focus moves to another item of the same list or button row, the highlight slides there from the old one
+    // (critically damped spring: quick start, soft stop, no bounce) instead of jumping; the labels stay put.
+    // Pressing quickly never leaves it more than about one item behind: it speeds up to keep up, like tvOS.
+    // Same x + width = a vertical list, same y + height = a row of buttons; anything else is a new place and does not slide.
+    // While it slides, rr/outline calls on the focused item's own rect are drawn at the moving position (gDx, gDy).
+    var gMode = -1; var gX = 0f; var gY = 0f; var gW = 0f; var gH = 0f; var gAt = 0L
+    var gOx = 0f; var gOy = 0f; var gChain = false; var gN = 0; var gStepAt = 0L
+    var gFull = 0f; var gK = 1f   // distance the current slide started from; how far it has come (0..1), so the item grows as the highlight arrives
+    var gRx = 0f; var gRy = 0f; var gRw = 0f; var gDx = 0f; var gDy = 0f
+    fun glide(x: Float, y: Float, w: Float, h: Float) {
+        val now = SystemClock.uptimeMillis(); val m = mode * 100 + setCat
+        val col = Math.abs(x - gX) < 1f && Math.abs(w - gW) < 1f; val row = Math.abs(y - gY) < 1f && Math.abs(h - gH) < 1f
+        val before = Math.hypot(gOx.toDouble(), gOy.toDouble())
+        if (!animOn() || m != gMode || !(col || row)) { gOx = 0f; gOy = 0f; gChain = false }
+        else {   // a step to another item (small moves = the list's own scrolling animation, followed as is)
+            if (col && Math.abs(y - gY) > h * 0.5f) { gOy = (gOy + gY - y).coerceIn(-1.6f * h, 1.6f * h); gAt = now - 16 }   // moves on this frame already
+            if (row && Math.abs(x - gX) > w * 0.5f) { gOx = (gOx + gX - x).coerceIn(-1.6f * w, 1.6f * w); gAt = now - 16 }
+        }
+        gMode = m; gX = x; gY = y; gW = w; gH = h
+        // a new step: from rest the item grows as the highlight arrives; pressed again while moving, it stays big (no throb per key)
+        val d0 = Math.hypot(gOx.toDouble(), gOy.toDouble()).toFloat(); if (d0 > before + 0.5) { gChain = before > 0.5; gN = if (now - gStepAt < 320) minOf(gN + 1, 5) else 0; gStepAt = now; gFull = d0 }   // gN: presses in quick succession
+        if (gOx == 0f && gOy == 0f) { gAt = 0L; gDx = 0f; gDy = 0f; gK = 1f; return }
+        val dt = if (gAt == 0L) 0.016f else minOf(0.05f, (now - gAt) / 1000f); gAt = now
+        // starts at full speed and slows as it lands (speed = distance left), so a press while moving just carries on:
+        // held or fast presses glide in one smooth motion instead of stopping at every item. 90 % there: keys 0.12 s, rows 0.22 s
+        val tau = (if (h < 80 * U) 0.052f else 0.095f) / (1f + 0.3f * gN);   // each quick press after another is faster, up to 2.5x
+        val f = Math.exp((-dt / tau).toDouble()).toFloat()
+        gOx *= f; gOy *= f
+        if (Math.abs(gOx) < 0.5f) gOx = 0f
+        if (Math.abs(gOy) < 0.5f) gOy = 0f
+        if (gOx == 0f && gOy == 0f) gAt = 0L else postInvalidateOnAnimation()
+        gDx = gOx; gDy = gOy
+        gK = if (gChain) 1f else if (gFull > 0f) (1f - Math.hypot(gOx.toDouble(), gOy.toDouble()).toFloat() / gFull).coerceIn(0f, 1f) else 1f
+    }
+    // logo box in lists with a sliding highlight: one solid colour whether focused or not, so nothing changes colour or shows through
+    // while the highlight passes (a fade tied to the slide looked washed out on the red highlight)
+    val LOGO_BG = 0xFF2C2C2E.toInt()
+    fun gOff(x: Float, y: Float, w: Float) = Math.abs(x - gRx) < 1f && Math.abs(y - gRy) < 1f && Math.abs(w - gRw) < 1f
     // white focus pill (or a faint one) with an icon and a label, used for every button row
     fun button(c: Canvas, x: Float, y: Float, w: Float, h: Float, on: Boolean, ic: String?, label: String, sz: Float = 29f, sc: Float = 1.06f) {
-        lift(c, on, x, y, w, h, sc) {
+        lift(c, on, x, y, w, h, sc, base = 0x24FFFFFF) {
             rr(c, x, y, w, h, FR, if (on) FOC else 0x24FFFFFF)
             val col = if (on) ONF else WHITE; val lw = tw(label, sz, 600); val iw = if (ic != null) 30 * U + 14 * U else 0f
             val sx = x + (w - lw - iw) / 2
@@ -354,7 +405,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             if (bx > x + maxW) break
             // the end buttons grow inwards, so a focused one keeps the card's 12 px padding (growing from the middle ate it)
             val px = when (k) { 0 -> bx; opts.lastIndex -> bx + bw; else -> bx + bw / 2 }
-            lift(c, on, bx, by, bw, bh, 1.08f, px) {
+            lift(c, on, bx, by, bw, bh, 1.08f, px, FILL) {
                 rr(c, bx, by, bw, bh, FR, if (on) FOC else FILL)
                 val col = if (on) ONF else WHITE
                 // positions follow the button height, so two-line labels stay inside the button at any row size / font size
@@ -454,7 +505,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (mode == 4 && backMode == 0) { if (!quick) { quickHide = false; okIdle = true }; touch(); invalidate(); return }   // already up: just refresh for the new channel
         quickHide = quick; okIdle = !quick; backMode = 0; subI = -3; subOpen = false; show(4); touch(); invalidate()
     }
-    fun openInfo(ch: Ch, pr: Prog?) { infoRow = 0; laterSel = 0; infoBack = if (mode == 4 || mode == 2 || mode == 14 || mode == 16) mode else 1; infoCh = ch; infoProg = pr; infoBtn = 0; show(5); invalidate() }
+    fun openInfo(ch: Ch, pr: Prog?) { infoRow = 0; laterSel = 0; infoBack = if (mode == 4 || mode == 2 || mode == 14 || mode == 16 || mode == 17) mode else 1; infoCh = ch; infoProg = pr; infoBtn = 0; show(5); invalidate() }
     // "Starting now" card for a reminder (replaces whatever screen was open); it closes itself after 20 s
     val remHide = Runnable { if (mode == 11) close() }
     fun showReminder(ch: Ch, pr: Prog) {
@@ -464,7 +515,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (mode == 6) a.setTheme(a.themeIdx, false)   // leaving the theme list without pressing OK: drop the preview
         a.settingsDone()
         val was = mode
-        grpGrab = false; plGrab = false; plMenu = -1; plAsk = -1; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (a.searching) a.endSearch()
+        grpGrab = false; plGrab = false; plMenu = -1; plAsk = -1; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (a.searching && a.searchQ == null) a.endSearch()   // a search being zapped through stays until a category is picked
         if (animOn() && visibility == View.VISIBLE && was != 0) slideOut(was) else visibility = View.GONE
         a.pip.place()
     }
@@ -488,7 +539,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             1 -> { c.save(); c.translate(shift, 0f); matOx = shift; drawChannels(c, w - shift, h); matOx = 0f; c.restore() }
             2 -> { val g = shift - M; c.save(); c.translate(g, 0f); matOx = g; drawGuide(c, w - g, h); matOx = 0f; c.restore() }   // the guide sits at 0 and moves only for the panels
             3 -> drawMenu(c, w, h)
-            4 -> { drawSub(c, w, h); postInvalidateDelayed(1000) }
+            4 -> { drawSub(c, w, h); tick(1000) }
             5 -> drawInfo(c, w, h)
             6 -> { c.save(); c.translate(M, 0f); matOx = M; drawThemes(c, w - M, h); matOx = 0f; c.restore() }
             8 -> { c.save(); c.translate(M, 0f); matOx = M; drawSettings(c, w - M, h); matOx = 0f; c.restore() }
@@ -499,7 +550,8 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             14 -> drawReminders(c, w, h)
             15 -> drawHidden(c, w, h)
             16 -> drawGrid(c, w, h)
-            11 -> { drawReminder(c, w); postInvalidateDelayed(250) }
+            17 -> drawSearch(c, w, h)
+            11 -> { drawReminder(c, w); tick(250) }
         }
     }
     val EASE = android.view.animation.PathInterpolator(0.2f, 0.8f, 0.2f, 1f)
@@ -534,7 +586,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             if (cx + cw > M - GAP + 1) drawPanel(c, cx, cw, h, if (a.grp == 0) "Favorite Groups" else "Categories", catItems(), catSel, catActive(), sideFocus == 1, null, true)
             if ((plMenu >= 0 || plAsk >= 0) && sideLvl >= 2) drawPlCard(c, px + pw + 14 * U, panSelY["Playlists"] ?: h / 2, h)
         }
-        if (T.gold && animOn()) postInvalidateDelayed(66)   // the gold shimmer moves only while a screen is open
+        if (T.gold && animOn()) tick(66)   // the gold shimmer moves only while a screen is open
         a.snow.end()
     }
 
@@ -596,7 +648,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             optButtons(c, cx, hy, cwid, opts, oi)
         }
         val now = System.currentTimeMillis()
-        if (sideLvl == 0) status(c, lw, listOf(a.hm.format(now), a.dm.format(now), srcName(a.shown.getOrNull(sel))), listOf(a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"))
+        if (sideLvl == 0) status(c, lw, listOf(a.hm.format(now), a.dm.format(now), srcName(a.shown.getOrNull(sel))), listOf(a.searchQ?.let { "Search “$it”" } ?: a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"))
         a.season().let { if (it != 0 && a.shown.isNotEmpty()) deco(c, it, -rh * 0.14f, hy + 6 * U - rh * 0.26f, rh * 0.52f) }
     }
 
@@ -721,8 +773,33 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
 
     // ---------- channel settings: Apple TV player style; LEFT / RIGHT between Program Info (subI -1) and the 4 settings, OK opens the list above ----------
     val subScrim = Paint()
+    // the card after a channel change (bottom left, video stays visible): logo, which search you are flipping through if any,
+    // channel, the show on now with LIVE, time left and a progress bar, and the two buttons that do more
+    fun drawZapCard(c: Canvas, ch: Ch, w: Float, h: Float) {
+        val pr = a.now(ch); val cw = 980 * U; val ch0 = 176 * U; val x = M; val y = h - M - ch0; val pad = 28 * U
+        if (T.fx) a.snow.card(x + matOx, y, cw, ch0, 34 * U)
+        glass(c, x, y, cw, ch0, 34 * U)
+        tile(c, ch, x + pad, y + (ch0 - 99 * U) / 2, 176 * U, 99 * U, 0x1AFFFFFF)
+        val tx = x + pad + 176 * U + 28 * U; val tr = x + cw - pad; var lx = tx
+        // top line: search capsule, channel number and name; the key hints on the right
+        val okL = a.keys.keys(KEY_ACTS[1]).firstOrNull()?.let { keyLabel(it) }
+        val hint = (if (okL != null) listOf(okL to "Settings") else emptyList()) + listOf("Hold OK" to "Menu")
+        val hw = keyHintW(hint); keyHint(c, hint, tr - hw, y + 40 * U, hw + 4 * U)
+        val sq = a.searchQ; val si = if (sq != null) a.shown.indexOfFirst { it.url == ch.url } else -1
+        if (si >= 0) { val tag = "Search “$sq” · ${si + 1} of ${a.shown.size}"; val tgw = minOf(tw(tag, 21f, 600) + 26 * U, tr - hw - 30 * U - lx - 120 * U)
+            rr(c, lx, y + 22 * U, tgw, 36 * U, 18 * U, 0x2EFFFFFF); txt(c, tag, lx + 13 * U, y + 40 * U, tgw - 26 * U, 21f, WHITE, 600); lx += tgw + 14 * U }
+        txt(c, "${ch.num}  ${ch.name}", lx, y + 40 * U, tr - hw - 30 * U - lx, 24f, SEC, 500)
+        // the show: title, then LIVE, time left and the bar
+        txt(c, pr?.title ?: ch.name, tx, y + 88 * U, tr - tx, 36f, WHITE, 700)
+        if (pr != null) {
+            val ly = y + 136 * U; var bx = tx + live(c, tx, ly, 17f) + 14 * U
+            val t = "${minLeft(pr)} min left  ·  ends ${a.hm.format(pr.stop)}"; txt(c, t, bx, ly, 420 * U, 23f, SEC); bx += tw(t, 23f) + 24 * U
+            if (tr - bx > 80 * U) progress(c, bx, ly - 3 * U, tr - bx, pr, 6f)
+        } else txt(c, "No TV guide for this channel", tx, y + 136 * U, tr - tx, 23f, SEC)
+    }
     fun drawSub(c: Canvas, w: Float, h: Float) {
         val ch = a.cur ?: a.shown.getOrNull(sel) ?: return
+        if (quickHide && backMode == 0) { drawZapCard(c, ch, w, h); return }   // after a channel change: just the small card
         subScrim.shader = LinearGradient(0f, h, 0f, h * 0.5f, intArrayOf(0xEB000000.toInt(), 0xB3000000.toInt(), 0), floatArrayOf(0f, 0.48f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(0f, h * 0.5f, w, h, subScrim)
         // after a channel change (quickHide) only the info shows; after OK the four compact setting tiles sit on the right
@@ -754,7 +831,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (tiles && pi) {   // from the player only: Program Info (subI -3), TV Guide (-2) and Pin (-1) come first
             for ((k, t) in listOf(Triple("info", "Program", "Info"), Triple("grid", "TV", "Guide"), Triple("pin", if (pinned == null) "Pin" else "Pinned", pinned?.name ?: "Channel")).withIndex()) {
                 val sel = subI == k - 3 && !subOpen; val x = px0 + k * pitch; if (T.fx) a.snow.card(x + matOx, ty0, tw0, th0, FR)
-                lift(c, sel, x, ty0, tw0, th0, 1.06f) {
+                lift(c, sel, x, ty0, tw0, th0, 1.06f, base = 0x1FFFFFFF) {
                     rr(c, x, ty0, tw0, th0, FR, if (sel) FOC else 0x1FFFFFFF)
                     val col = if (sel) ONF else WHITE
                     icon(c, t.first, x + tw0 / 2, ty0 + 29 * U, 34 * U, col)
@@ -767,7 +844,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val (opts, cs) = a.subOpts(i); val x = px0 + (if (pi) i + 3 else i) * pitch; val sel = i == subI && !subOpen
             val one = opts.size <= 1; val on = sel && !one   // nothing to choose: dimmed like a greyed-out Settings row, and no white focus
             if (T.fx) a.snow.card(x + matOx, ty0, tw0, th0, FR)
-            lift(c, sel, x, ty0, tw0, th0, 1.06f) {
+            lift(c, sel, x, ty0, tw0, th0, 1.06f, base = if (i == subI) SELBG else 0x1FFFFFFF) {
                 rr(c, x, ty0, tw0, th0, FR, if (on) FOC else if (sel) 0x3DFFFFFF else if (i == subI) SELBG else 0x1FFFFFFF)
                 val col = if (on) ONF else if (one && !sel) 0x66FFFFFF else WHITE
                 icon(c, ics[i], x + tw0 / 2, ty0 + 29 * U, 34 * U, col)
@@ -1198,7 +1275,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             val nx = X(now); fill(c, nx - 1.5f * U, gy + 84 * U, 3 * U, rows * rh + 8 * U, 0xD9FFFFFF.toInt())
             rr(c, nx - 38 * U, gy + 62 * U, 76 * U, 30 * U, 15 * U, WHITE); txt(c, a.hm.format(now), nx, gy + 77 * U, 70 * U, 19f, 0xFF1C1C1E.toInt(), 700, Paint.Align.CENTER)
         }
-        postInvalidateDelayed(30_000L)   // the now line moves
+        tick(30_000L)   // the now line moves
     }
 
     // ---------- reminders (main menu): a calendar strip of days on top, the chosen day's reminders below with their channel logos.
@@ -1253,7 +1330,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 val col = if (on) ONF else WHITE; val col2 = if (on) ONF2 else SEC; val cy = y + (rh - 12 * U) / 2
                 txt(c, a.hm.format(pr.start), ix + 4 * U, cy, 130 * U, 36f, col, 700)
                 val lx = ix + 140 * U
-                if (it.ch != null) tile(c, it.ch, lx, cy - 40 * U, 144 * U, 80 * U, if (on) 0xFF2C2C2E.toInt() else FILL)
+                if (it.ch != null) tile(c, it.ch, lx, cy - 40 * U, 144 * U, 80 * U, LOGO_BG)
                 else rr(c, lx, cy - 40 * U, 144 * U, 80 * U, 10 * U, FILL)
                 val tx = lx + 144 * U + 26 * U; val tmw = ix + iw - tx
                 txt(c, pr.title, tx, cy - 17 * U, tmw, 31f, col, 600)
@@ -1426,7 +1503,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             hdr(c, "Later on ${ch.name}", x, 785 * U, w - 2 * x)
             later.forEachIndexed { i, lp ->
                 val cx = x + i * 430 * U; val cy = 812 * U; val f = infoRow == 1 && i == laterSel.coerceIn(0, later.lastIndex)
-                lift(c, f, cx, cy, 400 * U, 170 * U, 1.06f) {
+                lift(c, f, cx, cy, 400 * U, 170 * U, 1.06f, base = 0x14FFFFFF) {
                     rr(c, cx, cy, 400 * U, 170 * U, FR, if (f) FOC else 0x14FFFFFF)
                     txt(c, a.hm.format(lp.start), cx + 24 * U, cy + 38 * U, 200 * U, 24f, if (f) ONF2 else SEC, 600)
                     if (a.hasRem(ch, lp)) { tp.letterSpacing = 0.03f; val rw = tw("REMINDER", 20f, 700); txt(c, "REMINDER", cx + 376 * U - rw, cy + 38 * U, rw + 4 * U, 20f, if (f) ONF else 0, 700, accent = !f); tp.letterSpacing = 0f; icon(c, "bell", cx + 362 * U - rw, cy + 38 * U, 22 * U, if (f) ONF else 0, !f) }
@@ -1476,12 +1553,15 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 9 -> { if (grpGrab) grpGrab = false else mode = 8 }   // drop the group, then back to settings
                 mode == 10 || mode == 13 -> mode = 8                        // back to settings
                 mode == 16 -> if (gBack == 0) close() else mode = gBack
+                mode == 17 -> if (srch.acc != null) srch.acc = null else if (srch.foc == 0 && srch.q.isNotEmpty()) { srch.q = srch.q.dropLast(1); suggest() }   // BACK on the letters deletes one
+                    else if (srch.foc > 0) { srch.foc = 0; srch.key = searchKeys(srch.num, searchMic()).indexOf(if (srch.num) "1" else "a").coerceAtLeast(0) } else { if (a.searchQ == null) a.endSearch(); mode = 3 }   // results: back to the letters, then the main menu
                 mode == 14 || mode == 15 -> mode = 3                                      // back to the main menu
                 mode == 12 -> if (rbSub > 0) rbSub = 0 else mode = 8          // back to settings
                 else -> close()
             }
             touch(); invalidate(); return true
         }
+        if (mode == 17) { val r = searchKey(k, e); touch(); invalidate(); return r }
         if (bkF && mode in listOf(6, 8, 9, 10, 12, 13, 14, 15)) {
             if (ok) { bkF = false; return onKeyDown(KeyEvent.KEYCODE_BACK, e) }
             if (!(up || dn) || mode == 13) { touch(); invalidate(); return true }   // UP / DOWN: the screen's list moves on from the back button
@@ -1649,7 +1729,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             when {
                 up -> { val o = sel; sel = wrap(sel + dir); jumpFrom(o) }
                 dn -> { val o = sel; sel = wrap(sel - dir); jumpFrom(o) }
-                lf -> if (oi > 0) oi-- else openSide()
+                lf -> if (oi > 0) oi-- else if (e.repeatCount == 0) openSide()
                 rt -> oi = minOf(oi + 1, a.nOpts(false) - 1)
                 ok -> if (ch != null) a.chOption(ch, oi)
             }
@@ -1675,7 +1755,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                         }
                     }
                 }
-                lf -> if (col == 2 && oi > 0) oi-- else if (col > 0) col-- else openSide()
+                lf -> if (col == 2 && oi > 0) oi-- else if (e.repeatCount > 0) Unit else if (col > 0) col-- else openSide()
                 rt -> if (col < 2) col++ else oi = minOf(oi + 1, a.nOpts(true, ch, dp.getOrNull(progI)) - 1)
                 ok -> if (col == 0) col = 2 else if (ch != null) a.chOption(ch, oi, if (col == 2) dp.getOrNull(progI) else null)   // OK on a date goes to its shows
             }

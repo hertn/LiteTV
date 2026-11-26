@@ -142,7 +142,7 @@ fun MainActivity.pastDays(u: String): Int {
 // reads one downloaded guide file straight into the database (nothing is collected in RAM); skipped when it was already imported
 fun MainActivity.importEpg(u: String, f: File) {
     val key = hx(u); val keep = wantedIds(u); val past = pastDays(u)
-    val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k4:$past"   // k2 = matching rules version (a new version re-imports the file once)
+    val mark = "${f.lastModified()}:$epgDaysN:${keep.size}:${dayStart()}:k5:$past"   // k2 = matching rules version (a new version re-imports the file once)
     if (prefs.getString("imp_$key", "") == mark) return
     val lo = dayStart() - past * 86400000L; val hi = dayStart() + epgDaysN * 86400000L
     val fl = SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
@@ -161,7 +161,7 @@ fun MainActivity.importEpg(u: String, f: File) {
     var n = 0; var bad = false
     val db = epgDb
     val kc = HashMap<String, String>()   // guide channel id -> its key (so the key is only worked out once per channel, not once per programme)
-    val st = db.compileStatement("INSERT INTO p(src, ch, s, e, t, d) VALUES(?, ?, ?, ?, ?, ?)")
+    val st = db.compileStatement("INSERT INTO p(src, ch, s, e, t, d, i) VALUES(?, ?, ?, ?, ?, ?, ?)")
     db.beginTransaction()
     try {
         db.execSQL("DELETE FROM p WHERE src = ?", arrayOf<Any?>(key))
@@ -169,12 +169,12 @@ fun MainActivity.importEpg(u: String, f: File) {
             val bis = f.inputStream().buffered(); bis.mark(2); val b0 = bis.read(); val b1 = bis.read(); bis.reset()
             val ins = if (b0 == 0x1f && b1 == 0x8b) GZIPInputStream(bis, 65536) else bis
             val p = Xml.newPullParser(); p.setInput(ins, null)
-            var ch = ""; var s = 0L; var e = 0L; var ti = ""; var de = ""; var ev = p.eventType
+            var ch = ""; var s = 0L; var e = 0L; var ti = ""; var de = ""; var im = ""; var ev = p.eventType
             while (ev != XmlPullParser.END_DOCUMENT) {
                 if (ev == XmlPullParser.START_TAG) {
                     when (p.name) {
                         "programme" -> {
-                            ti = ""; de = ""
+                            ti = ""; de = ""; im = ""
                             val attr = p.getAttributeValue(null, "channel") ?: ""
                             val raw = kc.getOrPut(attr) { idKey(attr) }
                             ch = if (raw.isNotEmpty() && (keep.isEmpty() || raw in keep)) raw else ""   // channels that are in none of your playlists are skipped
@@ -184,9 +184,10 @@ fun MainActivity.importEpg(u: String, f: File) {
                         }
                         "title" -> if (ch.isNotEmpty() && ti.isEmpty()) ti = p.nextText()
                         "desc" -> if (ch.isNotEmpty() && de.isEmpty()) de = p.nextText().take(1000)
+                        "icon" -> if (ch.isNotEmpty() && im.isEmpty() && p.depth == 3) im = (p.getAttributeValue(null, "src") ?: "").take(500)   // the show's picture
                     }
                 } else if (ev == XmlPullParser.END_TAG && p.name == "programme" && ch.isNotEmpty()) {
-                    st.clearBindings(); st.bindString(1, key); st.bindString(2, ch); st.bindLong(3, s); st.bindLong(4, e); st.bindString(5, ti); st.bindString(6, de)
+                    st.clearBindings(); st.bindString(1, key); st.bindString(2, ch); st.bindLong(3, s); st.bindLong(4, e); st.bindString(5, ti); st.bindString(6, de); st.bindString(7, im)
                     st.executeInsert(); n++; ch = ""
                     if (n % 2000 == 0) { epgCnt = n; ui.postInvalidate() }
                 }

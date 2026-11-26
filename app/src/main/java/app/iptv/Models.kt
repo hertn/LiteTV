@@ -44,7 +44,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 data class Ch(val id: String, val name: String, val group: String, val url: String, val logo: String, val num: Int, val src: String = "", val catchup: String = "", val cSrc: String = "", val cDays: Int = 0)
-data class Prog(val start: Long, val stop: Long, val title: String, val desc: String)
+data class Prog(val start: Long, val stop: Long, val title: String, val desc: String, val img: String = "")   // img: the show's picture link, when the guide has one
 data class Src(val id: String, val name: String, val m3u: String)
 data class Epg(val id: String, val name: String, val url: String, val all: Boolean, val srcIds: List<String>, val owner: String = "")
 data class DBtn(val label: String, val color: Int, val icon: String, val tip: String = "", val act: (android.app.Dialog) -> Unit)   // a pop-up row: icon, name, tip shown while selected

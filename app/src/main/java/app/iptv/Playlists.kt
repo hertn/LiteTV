@@ -88,14 +88,16 @@ fun MainActivity.hx(u: String) = Integer.toHexString(u.hashCode())
 // Reload button: forgets the channel logos and the in-memory guide caches; playlists and guides are re-downloaded by activate(refresh = true),
 // which keeps the old file (and the guide already imported) for any source whose download fails
 fun MainActivity.clearLogoAndGuideCaches() {
-    cacheDir.listFiles()?.filter { it.name.startsWith("lg") }?.forEach { it.delete() }
-    logos.evictAll(); failed.clear(); progCache.evictAll(); descCache.evictAll()
+    cacheDir.listFiles()?.filter { it.name.startsWith("lg") || it.name.startsWith("pc") }?.forEach { it.delete() }
+    logos.evictAll(); failed.clear(); pics.evictAll(); picFailed.clear(); progCache.evictAll(); descCache.evictAll()
     runOnUiThread { catchupBar.resetThumbs() }
 }
 fun MainActivity.cleanCache() {
     val keep = HashSet<String>()
     for (s in sources) { keep.add("l" + hx(s.m3u)); epgUrls(s).forEach { keep.add("e" + hx(it)) } }
     filesDir.listFiles()?.filter { (it.name.startsWith("l") || it.name.startsWith("e")) && it.name !in keep }?.forEach { it.delete() }
+    val old = System.currentTimeMillis() - 7 * 86400000L   // show pictures change with the programmes: a week old = gone
+    cacheDir.listFiles()?.filter { it.name.startsWith("pc") && it.lastModified() < old }?.forEach { it.delete() }
     // guide rows of guide files that no playlist uses any more
     val keys = sources.flatMap { epgUrls(it) }.map { hx(it) }.distinct()
     try { epgDb.execSQL(if (keys.isEmpty()) "DELETE FROM p" else "DELETE FROM p WHERE src NOT IN (" + keys.joinToString(",") { "'$it'" } + ")") } catch (e: Exception) {}

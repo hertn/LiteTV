@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.5.0
+
+A new Search, made like Apple TV's.
+
+- Search is now a full page instead of a pop-up: a big search field, one row of letters, and results that update by themselves as you type. There is no Search button to press. Results start from the second letter, so short names like "F1" work.
+- The results come in rows you scroll sideways: Channels (cards in the colour of the channel's logo), On Now (with the show's picture, a LIVE badge and how far it is) and Later (with the day, time and a bell when a reminder is set). Suggestions appear under the letters as you type.
+- Mix words: "nbc thanksgiving" finds Thanksgiving shows on NBC channels.
+- Talk instead of typing: press the mic button on the remote (or the mic key at the start of the letters) and say a channel or show.
+- Letters with accents: hold OK on a letter for its other forms, such as ä, é, ñ or ß.
+- Moving along the letters is faster: holding Left or Right speeds up, and quick presses glide. Play/Pause types a space and Rewind deletes, so you never have to travel to the ends of the row.
+- Back deletes a letter. Holding Back clears the words, and holding it again closes the menus.
+- After you watch a result, Up/Down and CH+/CH- go through the channels you found, until you open a category or a playlist. Search keeps your words and your place for next time.
+- A small card with the channel's logo, name and show now appears in the corner every time you change channel.
+- Holding Left or Right in a button bar now stops at the end of the bar instead of running into the next menu.
+- The highlight in the channel list now passes over the channel logos, and the logo boxes no longer flash white.
+- Menus redraw less often, so moving around feels smoother on slower TVs.
+- App Update now checks for the newest version again before it downloads, so it never installs an older one.
+
 ## 2.4.4
 
 A clearer update badge and a deeper Christmas red.

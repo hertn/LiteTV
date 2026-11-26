@@ -65,7 +65,7 @@ class MainActivity : Activity() {
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
     var favGrp: String? = null   // the favorite group shown in Favorites (lowercase key), null = all favorites
     var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0
-    val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false
+    val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false; var searchQ: String? = null   // searchQ: the words of the search whose channels are the list now (UP / DOWN go through them, Search.kt)
     val favSeq = java.util.concurrent.CopyOnWriteArrayList<String>()          // favorite urls in the order they were added
     val favGroupOrder = java.util.concurrent.CopyOnWriteArrayList<String>()   // your order of the favorite groups (lower-case group names)
     var favSort = 0; var favInner = 2                                          // favorites sort mode, and the sort inside a group (Custom groups mode)
@@ -411,36 +411,8 @@ class MainActivity : Activity() {
     // SQL LIKE pattern for the typed text; % and _ are escaped so they are searched as normal characters
     fun likeArg(q: String) = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
-    // guide keys of the programmes that are on right now and have the typed text in their title (one query for every playlist's guide)
-    fun keysOnNow(q: String): HashSet<String> {
-        val out = HashSet<String>(); val now = System.currentTimeMillis()
-        val sc = sources.toList().flatMap { epgUrls(it) }.distinct().map { hx(it) }; if (sc.isEmpty()) return out
-        try {
-            val sql = "SELECT DISTINCT ch FROM p WHERE s <= $now AND e > $now AND t LIKE ? ESCAPE '\\' AND src IN (" + sc.joinToString(",") { "?" } + ")"
-            epgDb.rawQuery(sql, (listOf(likeArg(q)) + sc).toTypedArray()).use { cur -> while (cur.moveToNext()) out.add(cur.getString(0)) }
-        } catch (e: Exception) {}
-        return out
-    }
-
-    // searches every playlist (they are all kept in memory) by channel name and by the title of the show that is on now;
-    // name matches come first; the guide of all playlists is merged while the results are shown
-    fun search(q: String) {
-        Thread {
-            val byName = ArrayList<Ch>(); val byShow = ArrayList<Ch>(); val seen = HashSet<String>()
-            val on = keysOnNow(q)
-            for (src in sources.toList()) {
-                val l = chCache[src.id] ?: try { loadPlaylist(src, false) } catch (e: Exception) { emptyList() }
-                for (c in l) {
-                    if (c.url in hidden) continue
-                    if (c.name.contains(q, true)) { if (seen.add(c.url)) byName.add(c) }
-                    else if (on.isNotEmpty() && keysOf(c).any { it in on } && seen.add(c.url)) byShow.add(c)
-                }
-            }
-            runOnUiThread { searching = true; shown = byName + byShow; syncScope(); ui.open(1) }
-        }.start()
-    }
     fun endSearch() {
-        searching = false
+        searching = false; searchQ = null
         selectGroup(grp, true)
     }
     // a channel picked from another playlist's search result / favorites: switch to that playlist first
@@ -457,6 +429,24 @@ class MainActivity : Activity() {
         else if (boot || ui.mode != 0) ui.open(if (ui.mode == 2) 2 else 1)
     }
 
+    // show pictures from the guide (Search cards): downloaded once to the cache folder, about 480 px wide in memory, 16 MB at most
+    val pics = object : android.util.LruCache<String, Bitmap>(16 * 1024 * 1024) { override fun sizeOf(k: String, b: Bitmap): Int = b.byteCount }
+    val picLoading: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap()); val picFailed: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+    fun picOf(u: String): Bitmap? {
+        if (!u.startsWith("http") || u in picFailed) return null
+        pics.get(u)?.let { return it }
+        if (picLoading.add(u)) pool.execute {
+            try {
+                val f = File(cacheDir, "pc" + hx(u))
+                if (!f.exists()) { val t = File(f.path + ".t"); open(u).use { s -> t.outputStream().use { s.copyTo(it) } }; t.renameTo(f) }
+                val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }; BitmapFactory.decodeFile(f.path, o)
+                o.inJustDecodeBounds = false; o.inSampleSize = maxOf(1, maxOf(o.outWidth, o.outHeight) / 480)   // tall posters too
+                val b = BitmapFactory.decodeFile(f.path, o)
+                if (b != null) { pics.put(u, b); ui.postInvalidate() } else picFailed.add(u)
+            } catch (e: Throwable) { picFailed.add(u) }   // Throwable: a huge guide picture (OutOfMemoryError) must not crash the app finally { picLoading.remove(u) }
+        }
+        return null
+    }
     fun logoOf(c: Ch): Bitmap? {
         if (!c.logo.startsWith("http") || c.logo in failed) return null
         logos.get(c.logo)?.let { return it }
@@ -721,20 +711,12 @@ class MainActivity : Activity() {
         return dlg
     }
 
-    fun searchBox() {
-        val input = dEdit("Channel or show", "search"); var d: android.app.Dialog? = null
-        fun go() { val q = input.text.toString().trim(); d?.dismiss(); if (q.isNotEmpty()) search(q) }
-        input.setOnEditorActionListener { _, _, _ -> go(); true }
-        d = showPanel("Search", listOf(input, dText("Finds channels and shows on now", 24f, 0xA3FFFFFF.toInt())), listOf(
-            DBtn("Search", C_PUR, "search") { go() }), keyboard = true)
-    }
-
     // main menu (OK button); the number is the icon id
     fun menuItems() = listOf("search" to "Search", "phone" to "Playlists", "grid" to "TV Guide", "bell" to "Reminders", "hide" to "Hidden Channels", "gear" to "Settings")   // an update shows as a badge on Settings (Ui.drawMenu)
 
     fun menuAct(i: Int) {
         when (i) {
-            0 -> { ui.close(); searchBox() }
+            0 -> ui.openSearch()
             1 -> settings()   // the pop-up sits over the menu; closing it goes back to the menu
             2 -> (cur ?: shown.firstOrNull())?.let { ui.openGrid(it, 3) }   // the grid guide; RIGHT while watching opens the quick guide
             3 -> ui.openReminders()
@@ -757,24 +739,30 @@ class MainActivity : Activity() {
     }
     fun updRefresh() { runOnUiThread { ui.invalidate() } }
 
+    // the newest release on GitHub: its tag and the APK link ("" when none is attached)
+    fun fetchLatest(): Pair<String, String> {
+        val cn = java.net.URL(UPDATE_API).openConnection() as java.net.HttpURLConnection
+        cn.connectTimeout = 10000; cn.readTimeout = 10000
+        cn.setRequestProperty("Accept", "application/vnd.github+json"); cn.setRequestProperty("User-Agent", "LiteTV")
+        if (cn.responseCode != 200) throw Exception("GitHub answered ${cn.responseCode}")
+        val o = JSONObject(cn.inputStream.bufferedReader().use { it.readText() })
+        val assets = o.optJSONArray("assets") ?: JSONArray()
+        for (k in 0 until assets.length()) { val ast = assets.getJSONObject(k); if (ast.getString("name").endsWith(".apk", true)) return o.getString("tag_name") to ast.getString("browser_download_url") }
+        return o.getString("tag_name") to ""
+    }
+
     // silent = the background check: a failed one stays quiet, and a new version is announced once
     fun checkUpdate(silent: Boolean = false) {
-        if (updState == 1 || updState == 4 || (silent && updState == 5)) return
+        if (updState == 1 || updState == 4) return
         val before = updState; updState = 1; updRefresh()
         Thread {
             try {
-                val cn = java.net.URL(UPDATE_API).openConnection() as java.net.HttpURLConnection
-                cn.connectTimeout = 10000; cn.readTimeout = 10000
-                cn.setRequestProperty("Accept", "application/vnd.github+json"); cn.setRequestProperty("User-Agent", "LiteTV")
-                if (cn.responseCode != 200) throw Exception("GitHub answered ${cn.responseCode}")
-                val o = JSONObject(cn.inputStream.bufferedReader().use { it.readText() })
-                val tag = o.getString("tag_name"); val assets = o.optJSONArray("assets") ?: JSONArray()
-                var url = ""
-                for (k in 0 until assets.length()) { val ast = assets.getJSONObject(k); if (ast.getString("name").endsWith(".apk", true)) { url = ast.getString("browser_download_url"); break } }
+                val (tag, url) = fetchLatest()
                 val local = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
                 when {
                     !isNewer(tag, local) -> updState = 2
                     url.isEmpty() -> { updErr = "No APK attached to $tag"; updState = 6 }
+                    before == 5 && tag == updTag -> updState = 5   // the downloaded one is still the newest
                     else -> { updTag = tag; updUrl = url; updState = 3 }
                 }
                 // remember what was found, so a restart still shows it in the menu and Settings
@@ -784,8 +772,8 @@ class MainActivity : Activity() {
                 }
             } catch (e: Exception) { updErr = e.message ?: "No connection"; updState = 6 }
             if (updState == 6) logErr("Update check failed: $updErr")
-            if (updState == 2 || updState == 3) prefs.edit().putLong("updAt", System.currentTimeMillis()).apply()
-            if (silent && updState == 6) updState = if (before == 3) 3 else 0   // offline: keep a known update
+            if (updState == 2 || updState == 3 || updState == 5) prefs.edit().putLong("updAt", System.currentTimeMillis()).apply()
+            if (silent && updState == 6) updState = if (before == 3 || before == 5) before else 0   // offline: keep a known or downloaded update
             if (silent && updState == 3) runOnUiThread { flash("New version $updTag is available. Open Settings > App update to install it", 15000) }
             updRefresh()
         }.start()
@@ -803,9 +791,12 @@ class MainActivity : Activity() {
     fun downloadUpdate() {
         if (updState != 3) return
         updState = 4; updPct = 0; updRefresh()
-        val url = updUrl
         Thread {
             try {
+                // ask again first: the saved update may be old by now (2.4.3 was found, then 2.4.4 came out), so always get the newest
+                try { val (t, u) = fetchLatest(); if (u.isNotEmpty() && isNewer(t, updTag)) { updTag = t; updUrl = u
+                    prefs.edit().putString("updTag", t).putString("updUrl", u).apply() } } catch (e: Exception) {}   // offline: use the saved link
+                val url = updUrl
                 val dir = java.io.File(cacheDir, "updates").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
                 val f = java.io.File(dir, "LiteTV-update.apk")
@@ -1056,14 +1047,14 @@ class MainActivity : Activity() {
         val grpHold = ui.mode == 9 && !ui.bkF   // Favorite Groups: holding OK picks up / drops like a short OK, and its key repeats can't flip it back and forth
         // every OK acts when it is let go, so holding it in a menu no longer fires again and again through the menus;
         // while it is down the focused item shows as pressed
-        val longAct = plHold || grpHold || ui.mode == 16 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0)))
+        val longAct = plHold || grpHold || ui.mode == 16 || ui.mode == 17 || (catchupProg == null && (ui.mode == 0 || (ui.mode == 4 && ui.backMode == 0)))
         if (okKey) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) { okHold = true; okLong = false; ui.okDown = true; ui.invalidate() }
                 else if (okHold && !okLong && longAct && (ev.isLongPress || ev.repeatCount >= 5)) { okLong = true; ui.okDown = false
                     if (plHold) { if (ui.plGrab) { ui.plGrab = false; ui.invalidate() } else { ui.plMenu = 0; ui.invalidate() } }   // picked up: holding OK drops it too
                     else if (grpHold) onKeyDown(ev.keyCode, KeyEvent(KeyEvent.ACTION_DOWN, ev.keyCode))
-                    else if (ui.mode == 16) ui.gridOk(true) else ui.openMenu() }
+                    else if (ui.mode == 16) ui.gridOk(true) else if (ui.mode == 17) ui.searchOk(true) else ui.openMenu() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
                 val short = okHold && !okLong; okHold = false; okLong = false; ui.okDown = false; ui.invalidate()
                 if (short) onKeyDown(ev.keyCode, KeyEvent(KeyEvent.ACTION_DOWN, ev.keyCode))
@@ -1074,7 +1065,8 @@ class MainActivity : Activity() {
             if (ev.action == KeyEvent.ACTION_DOWN) {
                 if (ev.repeatCount == 0) backLong = false
                 else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true   // holding BACK: first every menu closes at once, then the pin goes, then the app exits
-                    if (ui.mode != 0) ui.close()
+                    if (ui.mode == 17 && ui.srch.q.isNotEmpty()) { ui.srch.q = ""; ui.srch.foc = 0; ui.suggest(); ui.invalidate() }   // Search: the first hold clears the words, the next one leaves
+                    else if (ui.mode != 0) ui.close()
                     else if (catchupProg != null && catchupBar.visibility == View.VISIBLE) catchupBar.close()
                     else if (pip.ch != null) { unpin(); flash("Unpinned: hold BACK again to exit the app", 3000) } else exitApp() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
@@ -1143,6 +1135,11 @@ class MainActivity : Activity() {
         return true
     }
 
+    // voice typing for Search (Google's speech screen, using the remote's mic)
+    override fun onActivityResult(req: Int, res: Int, data: android.content.Intent?) {
+        super.onActivityResult(req, res, data)
+        if (req == REQ_SPEECH && res == RESULT_OK) data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { ui.searchSpoken(it) }
+    }
     override fun onStop() { super.onStop(); if (catchupProg == null) player.stop() else player.pause(); pip.stop();   // live: let go of the hardware decoders while in the background; catch-up keeps its position
         stopServer(); pv.removeCallbacks(epgTick); pv.removeCallbacks(updTick); pv.removeCallbacks(remRun) }
     override fun onStart() {
@@ -1154,7 +1151,7 @@ class MainActivity : Activity() {
     // pressing Home: give back the memory that is only a cache (logos, programmes read for the screen); they are re-read when needed
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) { logos.evictAll(); progCache.evictAll(); descCache.evictAll(); hitKey.clear() }
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) { logos.evictAll(); pics.evictAll(); progCache.evictAll(); descCache.evictAll(); hitKey.clear() }
     }
     override fun onDestroy() {
         super.onDestroy(); player.release(); pip.drop()

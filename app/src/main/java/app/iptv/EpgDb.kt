@@ -44,11 +44,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 // the TV guide lives on disk in this small database (not in RAM): one row per programme
-class EpgDbHelper(ctx: Context) : SQLiteOpenHelper(ctx, "epg.db", null, 1) {
+class EpgDbHelper(ctx: Context) : SQLiteOpenHelper(ctx, "epg.db", null, 2) {
     override fun onConfigure(db: SQLiteDatabase) { super.onConfigure(db); db.enableWriteAheadLogging() }   // reading never waits for an import
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE p(src TEXT, ch TEXT, s INTEGER, e INTEGER, t TEXT, d TEXT)")
+        db.execSQL("CREATE TABLE p(src TEXT, ch TEXT, s INTEGER, e INTEGER, t TEXT, d TEXT, i TEXT)")   // i: the show's picture (XMLTV <icon>)
         db.execSQL("CREATE INDEX pi ON p(ch, s)")
     }
-    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) { db.execSQL("DROP TABLE IF EXISTS p"); onCreate(db) }
+    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
+        if (o == 1) db.execSQL("ALTER TABLE p ADD COLUMN i TEXT")   // v2: show pictures; the guide stays, and the re-import (mark k5, Epg.kt) fills them in
+        else { db.execSQL("DROP TABLE IF EXISTS p"); onCreate(db) }
+    }
 }

@@ -126,7 +126,7 @@ fun MainActivity.moveFavGroup(from: Int, to: Int) {
 fun MainActivity.applyFavSort() { if (grp == 0 && !searching) selectGroup(0, true) }
 
 fun MainActivity.selectGroup(i: Int, keep: Boolean = false) {
-    searching = false; grp = i.coerceIn(0, groups.lastIndex); prefs.edit().putString("grp", groups[grp]).apply(); val v = vis()
+    searching = false; searchQ = null; grp = i.coerceIn(0, groups.lastIndex); prefs.edit().putString("grp", groups[grp]).apply(); val v = vis()
     shown = when (grp) { 0 -> favChannels().let { l -> val g = favGrp; if (g == null) l else l.filter { favKeyL(it) == g }.ifEmpty { favGrp = null; l } }; 1 -> v; else -> v.filter { it.group == groups[grp] } }
     syncScope()
     ui.reset(keep)

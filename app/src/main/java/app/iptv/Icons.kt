@@ -16,7 +16,9 @@ val ICON_SRC: Map<String, List<Pair<String, Boolean>>> = mapOf(
     "move" to listOf("M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" to false),
     "trash" to listOf("M4 7h16M10 7V4.5h4V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6" to false),
     "plus" to listOf("M12 5v14M5 12h14" to false),
+    "delete" to listOf("M9 6h11v12H9l-6-6z" to false, "M12.5 9.5l5 5M17.5 9.5l-5 5" to false),   // the search keyboard's backspace
     "back" to listOf("M14.5 6l-6 6 6 6" to false),   // the remote's Back button
+    "mic" to listOf("M9 6a3 3 0 0 1 6 0v5a3 3 0 0 1 -6 0z" to true, "M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3.5" to false),   // voice typing
     "search" to listOf("M4.0 10.5a6.5 6.5 0 1 0 13.0 0a6.5 6.5 0 1 0 -13.0 0z" to false, "M15.5 15.5L21 21" to false),
     "phone" to listOf("M9.0 2.5h6.0a2.5 2.5 0 0 1 2.5 2.5v14.0a2.5 2.5 0 0 1 -2.5 2.5h-6.0a2.5 2.5 0 0 1 -2.5 -2.5v-14.0a2.5 2.5 0 0 1 2.5 -2.5z" to false, "M10.5 18.5h3" to false),
     "guide" to listOf("M4.5 4.0h15.0a1.5 1.5 0 0 1 1.5 1.5v1.0a1.5 1.5 0 0 1 -1.5 1.5h-15.0a1.5 1.5 0 0 1 -1.5 -1.5v-1.0a1.5 1.5 0 0 1 1.5 -1.5z" to false, "M4.5 10.0h15.0a1.5 1.5 0 0 1 1.5 1.5v1.0a1.5 1.5 0 0 1 -1.5 1.5h-15.0a1.5 1.5 0 0 1 -1.5 -1.5v-1.0a1.5 1.5 0 0 1 1.5 -1.5z" to false, "M4.5 16.0h15.0a1.5 1.5 0 0 1 1.5 1.5v1.0a1.5 1.5 0 0 1 -1.5 1.5h-15.0a1.5 1.5 0 0 1 -1.5 -1.5v-1.0a1.5 1.5 0 0 1 1.5 -1.5z" to false),
