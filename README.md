@@ -24,7 +24,7 @@ A lightweight live TV (IPTV) app for Android TV. Bring your own M3U playlists an
 - Guide stored on disk instead of RAM, so memory use stays low even with long guides
 - Guide refresh setting (manual, every 6, 12, 24 or 48 hours) and an "Update guide now" button
 - Guide length setting (2 to 14 days, limited by what your guide file contains)
-- Search like on Apple TV: results as you type, rows of channels and shows with their pictures, voice search with the remote's mic, and letters with accents (hold OK)
+- Search like on Apple TV: results as you type, rows of channels and shows with their pictures, voice search with the remote's mic, and letters with accents (hold OK). Preview a result in a small window before you switch, and channels that don't play get marked "Not working"
 - Favorites and hidden channels (unhide them on the Hidden Channels page)
 - The channel list goes round: past the last channel it starts again from the first, with a line marking where
 - Pin a channel: it keeps playing muted in a corner while you watch another (handy for waiting out an ad break), and one button swaps the two
