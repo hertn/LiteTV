@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.5.1
+
+Search fixes: try channels before you switch, and no more getting stuck in search results.
+
+- Search results no longer take over the channel list. Left and Right always open your own playlists and Favorites.
+- OK on a channel or a show on now plays it in a preview window at the top right of Search, so you can check it works without leaving the results. OK again watches it full screen.
+- A channel that does not play gets a grey "Not working" card, and it stays marked next time.
+- The cards show a still of each channel once it has played, so you can see what a channel is before you open it.
+- After you watch a result, the channel list switches to where that channel lives: Favorites if it is one, otherwise its own playlist and category.
+- Back while watching goes to the channel before, as usual (it no longer jumps back into Search).
+- The focused card in Search has a ring in your theme colour, so it is easier to see.
+- Holding Back in Search clears the words only while you are on the letters; anywhere else it closes Search. A hold that starts in a menu never closes the app.
+- Search no longer closes by itself while a preview is playing.
+- Show pictures in Search load again after they drop out of memory.
+
 ## 2.5.0
 
 A new Search, made like Apple TV's.

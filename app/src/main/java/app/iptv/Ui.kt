@@ -80,7 +80,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
     init { isFocusable = true; isFocusableInTouchMode = true; alpha = UI_ALPHA }
 
     // every key press (and every screen change) restarts the idle timer; the screens close themselves after 30 s of nothing
-    val idle = Runnable { if (mode != 0) close() }
+    val idle = Runnable { if (mode != 0 && !(mode == 17 && srch.started)) close() }   // a preview playing in Search: never closes by itself
     var quickHide = false   // channel settings shown by a channel change: hides after 5 s unless a tile is used
     var okDown = false      // OK is held down: the focused item draws pressed (MainActivity.dispatchKeyEvent)
     var okIdle = false     // program info opened with OK from the video: hides after 5 s until another button is pressed
@@ -515,7 +515,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (mode == 6) a.setTheme(a.themeIdx, false)   // leaving the theme list without pressing OK: drop the preview
         a.settingsDone()
         val was = mode
-        grpGrab = false; plGrab = false; plMenu = -1; plAsk = -1; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (a.searching && a.searchQ == null) a.endSearch()   // a search being zapped through stays until a category is picked
+        grpGrab = false; plGrab = false; plMenu = -1; plAsk = -1; mode = 0; sideLvl = 0; removeCallbacks(idle); removeCallbacks(remHide); a.snow.close(); if (was == 17) searchLeave(); a.pvBox(null); if (a.searching) a.endSearch()
         if (animOn() && visibility == View.VISIBLE && was != 0) slideOut(was) else visibility = View.GONE
         a.pip.place()
     }
@@ -648,7 +648,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
             optButtons(c, cx, hy, cwid, opts, oi)
         }
         val now = System.currentTimeMillis()
-        if (sideLvl == 0) status(c, lw, listOf(a.hm.format(now), a.dm.format(now), srcName(a.shown.getOrNull(sel))), listOf(a.searchQ?.let { "Search “$it”" } ?: a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"))
+        if (sideLvl == 0) status(c, lw, listOf(a.hm.format(now), a.dm.format(now), srcName(a.shown.getOrNull(sel))), listOf(a.groups.getOrElse(a.grp) { "" }, "${a.shown.size} channels"))
         a.season().let { if (it != 0 && a.shown.isNotEmpty()) deco(c, it, -rh * 0.14f, hy + 6 * U - rh * 0.26f, rh * 0.52f) }
     }
 
@@ -780,14 +780,11 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
         if (T.fx) a.snow.card(x + matOx, y, cw, ch0, 34 * U)
         glass(c, x, y, cw, ch0, 34 * U)
         tile(c, ch, x + pad, y + (ch0 - 99 * U) / 2, 176 * U, 99 * U, 0x1AFFFFFF)
-        val tx = x + pad + 176 * U + 28 * U; val tr = x + cw - pad; var lx = tx
-        // top line: search capsule, channel number and name; the key hints on the right
+        val tx = x + pad + 176 * U + 28 * U; val tr = x + cw - pad; val lx = tx
+        // top line: channel number and name; the key hints on the right
         val okL = a.keys.keys(KEY_ACTS[1]).firstOrNull()?.let { keyLabel(it) }
         val hint = (if (okL != null) listOf(okL to "Settings") else emptyList()) + listOf("Hold OK" to "Menu")
         val hw = keyHintW(hint); keyHint(c, hint, tr - hw, y + 40 * U, hw + 4 * U)
-        val sq = a.searchQ; val si = if (sq != null) a.shown.indexOfFirst { it.url == ch.url } else -1
-        if (si >= 0) { val tag = "Search “$sq” · ${si + 1} of ${a.shown.size}"; val tgw = minOf(tw(tag, 21f, 600) + 26 * U, tr - hw - 30 * U - lx - 120 * U)
-            rr(c, lx, y + 22 * U, tgw, 36 * U, 18 * U, 0x2EFFFFFF); txt(c, tag, lx + 13 * U, y + 40 * U, tgw - 26 * U, 21f, WHITE, 600); lx += tgw + 14 * U }
         txt(c, "${ch.num}  ${ch.name}", lx, y + 40 * U, tr - hw - 30 * U - lx, 24f, SEC, 500)
         // the show: title, then LIVE, time left and the bar
         txt(c, pr?.title ?: ch.name, tx, y + 88 * U, tr - tx, 36f, WHITE, 700)
@@ -1554,7 +1551,7 @@ class Ui(ctx: Context, val a: MainActivity) : View(ctx) {
                 mode == 10 || mode == 13 -> mode = 8                        // back to settings
                 mode == 16 -> if (gBack == 0) close() else mode = gBack
                 mode == 17 -> if (srch.acc != null) srch.acc = null else if (srch.foc == 0 && srch.q.isNotEmpty()) { srch.q = srch.q.dropLast(1); suggest() }   // BACK on the letters deletes one
-                    else if (srch.foc > 0) { srch.foc = 0; srch.key = searchKeys(srch.num, searchMic()).indexOf(if (srch.num) "1" else "a").coerceAtLeast(0) } else { if (a.searchQ == null) a.endSearch(); mode = 3 }   // results: back to the letters, then the main menu
+                    else if (srch.foc > 0) { srch.foc = 0; srch.key = searchKeys(srch.num, searchMic()).indexOf(if (srch.num) "1" else "a").coerceAtLeast(0) } else { searchLeave(); a.pvBox(null); a.endSearch(); mode = 3 }   // results: back to the letters, then the main menu
                 mode == 14 || mode == 15 -> mode = 3                                      // back to the main menu
                 mode == 12 -> if (rbSub > 0) rbSub = 0 else mode = 8          // back to settings
                 else -> close()

@@ -17,8 +17,10 @@ import android.view.KeyEvent
 // Voice: the mic key or the remote's mic opens Google's speech screen; the words come back into the field.
 // Holding OK on a letter pops up its other forms (ä é ñ ...). BACK deletes a letter; holding BACK clears the words, holding it again leaves. Holding LEFT / RIGHT speeds up; Play/Pause = space, Rewind = delete.
 // Every word must be in the channel name or the show title, so "nbc thanksgiving" finds Thanksgiving shows on NBC channels.
-// Watching a result makes the channels found the channel list: UP / DOWN and CH +/- go through them (MainActivity.searchQ)
-// until a category or playlist is picked. The page keeps the words and the place you were when it opens again.
+// Results: the window at the top right shows the focused card's picture; OK plays it there (one stream, the main player shrunk),
+// OK again = watch full screen, and the channel list becomes that channel's (Favorites, or its own playlist and category). A channel that fails gets "Not working" on its card (remembered).
+// While a preview plays the page never closes by itself.
+// Leaving without watching goes back to the channel from before. The page keeps the words and the place you were when it opens again.
 
 const val REQ_SPEECH = 7117
 
@@ -34,6 +36,9 @@ class SearchState {
     var pageY = 0f; var pageAt = 0L   // how far the page has scrolled (animated)
     val hOff = FloatArray(3); var hAt = 0L   // each shelf's sideways scroll (CHANNELS, ON NOW, LATER), animated
     var cardKey = ""; var cardPrev = ""; var cardAt = 0L   // the focused card grows over 0.2 s, the one before shrinks back
+    var before: Ch? = null; var prevBefore: Ch? = null; var started = false   // the channel from before the previews, put back when leaving
+    var pvWant: String? = null; var pvAt = 0L   // the channel in the preview window (OK on its card), and when it was asked for
+    val dead = HashSet<String>(); var deadLoaded = false   // channels that failed in a preview (prefs "deadCh")
     val tints = HashMap<String, Int>(); val grads = HashMap<Long, LinearGradient>()
     val work = java.util.concurrent.Executors.newSingleThreadExecutor()   // suggestions, the index, favourites: one at a time, never piled up
     val find = java.util.concurrent.Executors.newSingleThreadExecutor()   // the searches, apart so a slow one never holds up suggestions
@@ -184,13 +189,34 @@ fun Ui.searchSpoken(t: String) {
     s.q = t.lowercase().take(40); s.acc = null; s.foc = 0; suggest(); s.autoRun?.let { removeCallbacks(it) }; if (s.q.trim().length >= 2) runSearch(jump = false)
 }
 
-// watch a result: the channels found become the list UP / DOWN goes through
+// watch a result full screen; nothing stays on the picture
 fun Ui.searchWatch(ch: Ch) {
-    val s = srch; val list = shownRes().now.map { it.first }.distinctBy { it.url }
-    a.searchQ = null; close()   // ends the old search list, if there was one
-    a.searching = true; a.searchQ = s.done; a.shown = list; a.syncScope()
-    if (ch != a.cur || a.catchupProg != null) a.play(ch, true) else openSubPlayer(true)
-    reset(false)
+    val s = srch; val before = if (s.started) s.before else null; s.started = false   // watching: the channel from before is not put back
+    close()
+    if (ch != a.cur || a.catchupProg != null || a.errShown) a.play(ch)
+    if (before != null && before.url != ch.url) a.prev = before   // BACK = the channel from before Search, not the last preview
+    a.showListOf(ch); s.pvWant = ch.url   // in Search again it is still the one in the window
+}
+// leaving Search without watching: back to the channel from before the previews
+fun Ui.searchLeave() {
+    val s = srch; s.pvWant = null; a.player.volume = 1f
+    if (!s.started) return; s.started = false
+    val b = s.before
+    if (b == null) { a.player.stop(); a.player.clearMediaItems() } else if (b.url != a.cur?.url || a.errShown) { a.play(b); a.prev = s.prevBefore }
+}
+fun Ui.deadSet(): HashSet<String> { val s = srch; if (!s.deadLoaded) { s.dead.addAll(a.prefs.getStringSet("deadCh", emptySet())!!); s.deadLoaded = true }; return s.dead }
+fun Ui.saveDead() { a.prefs.edit().putStringSet("deadCh", HashSet(srch.dead)).apply() }
+fun Ui.searchDead(ch: Ch?) { if (ch == null) return; if (deadSet().add(ch.url)) saveDead(); invalidate() }
+// the card with the focus, when it is on now (Channels or On Now)
+fun Ui.searchFocCh(): Pair<Ch, Prog?>? { val s = srch; val r = shownRes(); return when (s.foc) { 4 -> r.now.getOrNull(s.chSel); 1 -> r.now.getOrNull(r.nCh + s.nowSel); else -> null } }
+// OK on a card that is on now: the first OK plays it in the preview window, the next one watches it full screen
+fun Ui.searchPick(ch: Ch) {
+    val s = srch
+    if (s.pvWant == ch.url && a.cur?.url == ch.url && !a.errShown) { searchWatch(ch); return }
+    if (!s.started) { s.started = true; s.before = a.cur; s.prevBefore = a.prev }
+    s.pvWant = ch.url; s.pvAt = SystemClock.uptimeMillis()
+    if (ch != a.cur || a.catchupProg != null || a.errShown || a.frameUrl != ch.url) a.play(ch)
+    invalidate()
 }
 
 // Program Info from a result reads every playlist's guide
@@ -204,9 +230,9 @@ fun Ui.searchOk(hold: Boolean) {
         0 -> { val k = searchKeys(s.num, searchMic()).getOrNull(s.key) ?: return
             if (hold) { if (k == "del") { s.q = ""; suggest() } else ACCENTS[k]?.let { s.acc = listOf(k) + it.map { c -> c.toString() }; s.accSel = 1 } }
             else searchType(k) }
-        4 -> r.now.getOrNull(s.chSel)?.let { (ch, pr) -> if (hold) { scopeAll(); openInfo(ch, pr) } else searchWatch(ch) }
-        1 -> r.now.getOrNull(r.nCh + s.nowSel)?.let { (ch, pr) -> if (hold) { scopeAll(); openInfo(ch, pr) } else searchWatch(ch) }
-        2 -> r.later.getOrNull(s.laterSel)?.let { (ch, pr) -> if (hold) { scopeAll(); openInfo(ch, pr) } else a.toggleRem(ch, pr) }
+        4 -> r.now.getOrNull(s.chSel)?.let { (ch, pr) -> if (hold) { scopeAll(); a.pvBox(null); openInfo(ch, pr) } else searchPick(ch) }
+        1 -> r.now.getOrNull(r.nCh + s.nowSel)?.let { (ch, pr) -> if (hold) { scopeAll(); a.pvBox(null); openInfo(ch, pr) } else searchPick(ch) }
+        2 -> r.later.getOrNull(s.laterSel)?.let { (ch, pr) -> if (hold) { scopeAll(); a.pvBox(null); openInfo(ch, pr) } else a.toggleRem(ch, pr) }
         3 -> s.sugg.getOrNull(s.sugSel)?.let { if (!hold) { s.q = it.lowercase(); s.sugg = emptyList(); s.sgGen++; s.sgRun?.let { r0 -> removeCallbacks(r0) };   // a lookup still running must not refill the list
                 s.autoRun?.let { r0 -> removeCallbacks(r0) }; runSearch() } }   // the words become the suggestion, then to the results
     }
@@ -220,7 +246,7 @@ fun Ui.searchKey(k: Int, e: KeyEvent): Boolean {
     val s = srch; val r = shownRes(); val up = k == KeyEvent.KEYCODE_DPAD_UP; val dn = k == KeyEvent.KEYCODE_DPAD_DOWN
     val lf = k == KeyEvent.KEYCODE_DPAD_LEFT; val rt = k == KeyEvent.KEYCODE_DPAD_RIGHT
     val ok = k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER
-    if (bkF) { if (ok) { bkF = false; if (a.searchQ == null) a.endSearch(); mode = 3 }; if (dn) bkF = false; return true }   // the ‹ in the header: leaves (BACK there would delete a letter)
+    if (bkF) { if (ok) { bkF = false; searchLeave(); a.pvBox(null); a.endSearch(); mode = 3 }; if (dn) bkF = false; return true }   // the ‹ in the header: leaves (BACK there would delete a letter)
     s.acc?.let { l -> when { lf || rt -> s.accSel = hStep(s.accSel, if (lf) -1 else 1, l.size); ok -> searchOk(false); up || dn -> s.acc = null }; return true }
     // remote shortcuts: the mic talks, Play/Pause adds a space, Rewind deletes; a real keyboard types straight in
     when (k) {
@@ -285,7 +311,22 @@ val shadowP = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF000000.toInt() }
 fun Ui.drawSearch(c: Canvas, w: Float, h: Float) {
     val s = srch; val r = shownRes(); val L = 80 * U; val R = w - 80 * U; val now = SystemClock.uptimeMillis(); val mic = searchMic()
     val blank = s.q.isBlank(); val hasSug = s.sugg.isNotEmpty() && !blank
-    glass(c, 0f, 0f, w, h, 0f)
+    // results: a fixed band on top (the show, and the preview window at the right), the shelves scroll under it
+    val res = s.foc == 4 || s.foc == 1 || s.foc == 2; val BB = 500 * U
+    val fc = if (s.foc == 4 || s.foc == 1) searchFocCh() else null; val fu = fc?.first?.url
+    val win = RectF(w - 800 * U, 48 * U, w - 80 * U, 453 * U); val dead = deadSet()
+    val open = mode == 17   // false while the page slides out after closing: then the picture is full screen again
+    val mine = open && fu != null && fu == s.pvWant && a.cur?.url == fu   // the focused card is the one in the window
+    val playing = mine && a.frameUrl == fu && !a.errShown
+    val failed = mine && a.errShown
+    if (open) a.player.volume = if (s.started && fc != null && !mine) 0f else 1f   // looking at another card: the preview keeps going, quietly
+    if (mine && !playing && !failed && now - s.pvAt > 15_000) { a.errShown = true; a.player.stop(); fc?.let { searchDead(it.first) } }   // no picture after 15 s: not working
+    if (playing && dead.remove(fu)) saveDead()   // it works now
+    if (mine && !playing) tick(250)
+    if (open) a.pvBox(if (fc != null) win else null)
+    if (playing) { holeP.reset(); holeP.fillType = android.graphics.Path.FillType.EVEN_ODD; holeP.addRect(0f, 0f, w, h, android.graphics.Path.Direction.CW)
+        holeP.addRoundRect(win, 24 * U, 24 * U, android.graphics.Path.Direction.CW); mat(c, holeP) }   // the picture shows through a hole in the page
+    else glass(c, 0f, 0f, w, h, 0f)
     // ---- page layout (page positions; the page scrolls by pageY) ----
     val fy = 150 * U; val ky = 252 * U; val kh = 66 * U; val ruleY = 350 * U
     var y0 = ruleY + 24 * U; val sugY = y0; if (hasSug) y0 += 56 * U + 36 * U else y0 += 18 * U
@@ -293,11 +334,11 @@ fun Ui.drawSearch(c: Canvas, w: Float, h: Float) {
     val secY = HashMap<Int, Float>(); var yy = y0
     for (f in secs) { secY[f] = yy; yy += 54 * U + (if (f == 4) 169 * U else 248 * U) + 50 * U + 44 * U }
     // the page follows the focus: at the top for the letters and suggestions, else the focused shelf's title near the top
-    val target = when (s.foc) { 0, 3 -> 0f; else -> ((secY[s.foc] ?: 0f) - 90 * U).coerceAtLeast(0f) }
+    val target = when (s.foc) { 0, 3 -> 0f; else -> (secY[s.foc] ?: 0f) - BB - 10 * U }   // results: the focused shelf right under the band
     fun ease(cur: Float, to: Float, dt: Float) = if (!animOn() || Math.abs(to - cur) < 0.5f) to else cur + (to - cur) * (1f - Math.exp((-dt / 0.085f).toDouble()).toFloat())
     val dtP = if (s.pageAt == 0L) 0.016f else minOf(0.05f, (now - s.pageAt) / 1000f)
     s.pageY = ease(s.pageY, target, dtP); var moving = s.pageY != target
-    c.save(); c.translate(0f, -s.pageY)
+    c.save(); if (res) c.clipRect(0f, BB, w, h); c.translate(0f, -s.pageY)
     // ---- back arrow and title: the same header as every other page (Playlists, Settings, ...) ----
     head(c, 36 * U, 28 * U, "Search", 400 * U)
     // ---- the field: big, no box; grey words until you type; blinking caret on the letters ----
@@ -381,14 +422,18 @@ fun Ui.drawSearch(c: Canvas, w: Float, h: Float) {
             c.save(); c.scale(sc, sc, x + cw / 2, cy + chh / 2)
             if (gr > 0.01f) { shadowP.alpha = (110 * gr).toInt(); shadowP.setShadowLayer(34 * U * gr, 0f, 18 * U * gr, (0x8C * gr).toInt() shl 24)
                 c.drawRoundRect(RectF(x + 6 * U, cy + 6 * U, x + cw - 6 * U, cy + chh - 6 * U), 18 * U, 18 * U, shadowP) }
-            val tint = tintOf(chn)
-            if (isCh) { cardFill(c, x, cy, cw, chh, tint, true); drawLogo(c, chn, x + cw * 0.1f, cy + chh * 0.12f, cw * 0.8f, chh * 0.76f) }
+            val tint = tintOf(chn); val dd = f != 2 && chn.url in dead; val dim = dd && gr < 0.5f
+            if (dim) c.saveLayerAlpha(x, cy, x + cw, cy + chh, 97)   // tried and not working: greyed
+            if (isCh) { val th = a.thumbOf(chn)
+                if (th != null) { cardPic(c, th, x, cy, cw, chh); rr(c, x + 14 * U, cy + 14 * U, 84 * U, 40 * U, 9 * U, 0x4D000000); drawLogo(c, chn, x + 14 * U, cy + 14 * U, 84 * U, 40 * U) }   // a still of the channel, its logo small
+                else { cardFill(c, x, cy, cw, chh, tint, true); drawLogo(c, chn, x + cw * 0.1f, cy + chh * 0.12f, cw * 0.8f, chh * 0.76f) }
+                if (dd) deadTag(c, x + cw - 14 * U, cy + 32 * U) }
             else {
-                val pic = pr?.img?.let { a.picOf(it) }
+                val pic = (if (f == 1) a.thumbOf(chn) else null) ?: pr?.img?.let { a.picOf(it) }   // on now: the channel's own still first (what it really shows), else the guide's
                 if (pic != null) cardPic(c, pic, x, cy, cw, chh) else cardFill(c, x, cy, cw, chh, tint, false)
                 if (f == 1) {   // on now: small logo badge, LIVE, the show, how far it is
                     rr(c, x + 18 * U, cy + 18 * U, 100 * U, 48 * U, 10 * U, 0x4D000000); drawLogo(c, chn, x + 18 * U, cy + 18 * U, 100 * U, 48 * U)
-                    live(c, x + cw - 92 * U, cy + 42 * U, 17f)
+                    if (dd) deadTag(c, x + cw - 18 * U, cy + 42 * U) else live(c, x + cw - 92 * U, cy + 42 * U, 17f)
                     pr?.let { val ls = split2(it.title, cw - 44 * U, 30f, 700).take(2); ls.forEachIndexed { li, l -> txt(c, l, x + 22 * U, cy + chh - 50 * U - (ls.size - 1 - li) * 36 * U, cw - 44 * U, 30f, WHITE, 700) }
                         progress(c, x + 22 * U, cy + chh - 22 * U, cw - 44 * U, it, 5f) }
                 } else {   // later: day and time, a bell when a reminder is set, the show
@@ -398,9 +443,13 @@ fun Ui.drawSearch(c: Canvas, w: Float, h: Float) {
                     pr?.let { val ls = split2(it.title, cw - 44 * U, 30f, 700).take(2); ls.forEachIndexed { li, l -> txt(c, l, x + 22 * U, cy + chh - 34 * U - (ls.size - 1 - li) * 36 * U, cw - 44 * U, 30f, WHITE, 700) } }
                 }
             }
+            if (dim) c.restore()
+            if (gr > 0.01f) {   // focus ring: the theme colour just outside the card, fading in with the lift (the zoom alone was too subtle)
+                val o = 5 * U; accentPaint(p); p.alpha = (255 * gr).toInt(); p.style = Paint.Style.STROKE; p.strokeWidth = 5 * U   // the theme's accent (New Year: the gold)
+                c.drawRoundRect(RectF(x - o, cy - o, x + cw + o, cy + chh + o), 22 * U, 22 * U, p); p.style = Paint.Style.FILL; p.shader = null; p.alpha = 255 }
             c.restore()
             // caption under the card: brighter and a little lower when focused
-            val capY = cy + chh + 30 * U + 12 * U * gr; val capC = if (gr > 0.5f) WHITE else 0x9EFFFFFF.toInt()
+            val capY = cy + chh + 30 * U + 12 * U * gr; val capC = if (gr > 0.5f) WHITE else if (f != 2 && chn.url in dead) 0x59FFFFFF else 0x9EFFFFFF.toInt()
             val cap = when (f) { 4 -> chn.name + (if (gr > 0.5f && pr != null) "  ·  ${pr.title}" else ""); 1 -> "${chn.name}  ·  ${pr?.let { minLeft(it) } ?: 0} min left"; else -> chn.name }
             txt(c, cap, x, capY, cw, 24f, capC, 500)
         }
@@ -418,5 +467,44 @@ fun Ui.drawSearch(c: Canvas, w: Float, h: Float) {
                 txt(c, v, x + cwd / 2, py + 48 * U, cwd, 42f, if (on) ONF else WHITE, 500, Paint.Align.CENTER) } }
     }
     c.restore()
+    if (res) searchBand(c, w, fc, win, playing, failed, mine)
     if (moving || s.pageY != target) postInvalidateOnAnimation()
+}
+val holeP = android.graphics.Path()
+fun Ui.deadTag(c: Canvas, right: Float, cy: Float) { val t = "NOT WORKING"; val tw0 = tw(t, 17f, 700) + 20 * U
+    rr(c, right - tw0, cy - 17 * U, tw0, 34 * U, 7 * U, 0x99000000.toInt()); txt(c, t, right - tw0 + 10 * U, cy, tw0, 17f, WHITE, 700) }
+// the band over the results: the focused show on the left, the preview window on the right (Later: no window, nothing to play yet)
+fun Ui.searchBand(c: Canvas, w: Float, fc: Pair<Ch, Prog?>?, win: RectF, playing: Boolean, failed: Boolean, mine: Boolean) {
+    val s = srch; val r = shownRes(); val L = 80 * U
+    head(c, 36 * U, 28 * U, "Search “${s.done}”", 960 * U)
+    val later = if (s.foc == 2) r.later.getOrNull(s.laterSel) else null
+    val ch = fc?.first ?: later?.first ?: return; val pr = fc?.second ?: later?.second
+    val iw = (if (fc != null) win.left - 60 * U else w - 80 * U) - L
+    var y = 196 * U
+    rr(c, L, y - 24 * U, 100 * U, 48 * U, 10 * U, 0x4D000000); drawLogo(c, ch, L, y - 24 * U, 100 * U, 48 * U)
+    txt(c, if (later != null) "${r.days.getOrElse(s.laterSel) { "" }}  ·  ${ch.name}" else ch.name, L + 116 * U, y, iw - 116 * U, 26f, SEC, 500)
+    y += 70 * U
+    split2(pr?.title ?: ch.name, iw, 52f, 700).take(2).forEach { txt(c, it, L, y, iw, 52f, WHITE, 700); y += 62 * U }
+    if (fc != null) {
+        if (pr != null) { val lw = live(c, L, y, 17f); val t = "${minLeft(pr)} min left"; txt(c, t, L + lw + 14 * U, y, 300 * U, 24f, SEC)
+            progress(c, L + lw + 34 * U + tw(t, 24f), y - 3 * U, 260 * U, pr, 6f) }
+        else txt(c, "No TV guide for this channel", L, y, iw, 24f, SEC)
+        keyHint(c, listOf("OK" to (if (mine && !failed) "Watch full screen" else "Preview"), "Hold OK" to "Program Info"), L, y + 62 * U, iw)
+    } else if (later != null) keyHint(c, listOf("OK" to (if (a.hasRem(later.first, later.second)) "Remove Reminder" else "Remind Me"), "Hold OK" to "Program Info"), L, y, iw)
+    if (fc == null) return
+    // until the picture plays (or when it fails) a dark box in the window says what is going on
+    if (playing) { live(c, win.right - 20 * U - tw("LIVE", 17f, 700) - 18 * U, win.top + 34 * U, 17f); return }
+    if (!mine) {   // not playing here: the card's picture (or its logo on its colour), and what OK does
+        val pic = a.thumbOf(ch) ?: pr?.img?.let { a.picOf(it) }
+        if (pic != null) cardPic(c, pic, win.left, win.top, win.width(), win.height())
+        else { cardFill(c, win.left, win.top, win.width(), win.height(), tintOf(ch), false); drawLogo(c, ch, win.left + win.width() * 0.3f, win.top + win.height() * 0.3f, win.width() * 0.4f, win.height() * 0.4f) }
+        if (ch.url in deadSet()) deadTag(c, win.right - 20 * U, win.top + 34 * U)
+        val hl = listOf("OK" to "Preview"); val hw = keyHintW(hl); rr(c, win.left + 20 * U, win.bottom - 66 * U, hw + 28 * U, 46 * U, 23 * U, 0x99000000.toInt())
+        keyHint(c, hl, win.left + 34 * U, win.bottom - 43 * U, hw + 4 * U); return }
+    rr(c, win.left, win.top, win.width(), win.height(), 24 * U, 0xFF0D0D10.toInt())
+    val cx = win.centerX(); val cy = win.centerY(); val mw = win.width() - 60 * U; val was = ch.url in deadSet()
+    if (failed) { txt(c, "This channel isn't working", cx, cy - 18 * U, mw, 30f, WHITE, 600, Paint.Align.CENTER)
+        txt(c, "Marked on its card  ·  try the next one", cx, cy + 26 * U, mw, 23f, SEC, 400, Paint.Align.CENTER) }
+    else { txt(c, "Opening ${ch.name}…", cx, cy - (if (was) 18 else 0) * U, mw, 26f, SEC, 500, Paint.Align.CENTER)
+        if (was) txt(c, "It didn't work last time", cx, cy + 26 * U, mw, 23f, 0x61FFFFFF, 400, Paint.Align.CENTER) }
 }

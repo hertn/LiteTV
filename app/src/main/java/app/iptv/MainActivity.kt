@@ -65,7 +65,7 @@ class MainActivity : Activity() {
     var sources = listOf<Src>(); var epgs = listOf<Epg>(); var act = 0; var grp = 1
     var favGrp: String? = null   // the favorite group shown in Favorites (lowercase key), null = all favorites
     var prev: Ch? = null; var cur: Ch? = null; var numBuf = ""; var arMode = 0
-    val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false; var searchQ: String? = null   // searchQ: the words of the search whose channels are the list now (UP / DOWN go through them, Search.kt)
+    val hidden = HashSet<String>(); val favs = HashSet<String>(); var searching = false; var frameUrl: String? = null; var pendingGrp: String? = null   // frameUrl: the channel whose first picture has shown; pendingGrp: category to open once a playlist has loaded
     val favSeq = java.util.concurrent.CopyOnWriteArrayList<String>()          // favorite urls in the order they were added
     val favGroupOrder = java.util.concurrent.CopyOnWriteArrayList<String>()   // your order of the favorite groups (lower-case group names)
     var favSort = 0; var favInner = 2                                          // favorites sort mode, and the sort inside a group (Custom groups mode)
@@ -109,7 +109,7 @@ class MainActivity : Activity() {
     val retryRun = Runnable { if (cur != null) player.prepare() }
     // a spinner in the middle of the screen shows when a channel is still buffering after a short moment
     var loadingShown = false
-    val loadRun = Runnable { if (player.playbackState == Player.STATE_BUFFERING && !errShown) { loadingShown = true; spin.visibility = View.VISIBLE } }
+    val loadRun = Runnable { if (player.playbackState == Player.STATE_BUFFERING && !errShown && ui.mode != 17) { loadingShown = true; spin.visibility = View.VISIBLE } }
     fun hideLoading() { loadingShown = false; spin.visibility = View.GONE }
     // stream errors are shown in the middle of the screen
     val hideMsg = Runnable { msg.visibility = View.GONE }
@@ -315,6 +315,7 @@ class MainActivity : Activity() {
                     retryN++; player.seekToDefaultPosition(); player.prepare(); return
                 }
                 errShown = true
+                if (ui.mode == 17 && catchupProg == null) { logErr((cur?.name ?: "Stream") + " (search preview): " + errText(e)); ui.searchDead(cur); return }   // Search's preview: no retries, the card gets marked
                 logErr((cur?.name ?: "Stream") + (if (catchupProg != null) " (catch-up)" else "") + ": " + errText(e))
                 val head = cur?.let { "${it.num}: ${it.name}" } ?: "Stream"
                 if (retryN < MAX_RETRY) {
@@ -323,7 +324,7 @@ class MainActivity : Activity() {
                     pv.postDelayed(retryRun, wait)
                 } else flashMid("$head\n${errText(e)}\nGave up. Select the channel again to retry", 10000)
             }
-            override fun onRenderedFirstFrame() { mainFrame() }
+            override fun onRenderedFirstFrame() { frameUrl = cur?.url; mainFrame(); pv.removeCallbacks(grabRun); pv.postDelayed(grabRun, 2000); if (ui.mode == 17) ui.invalidate() }
             override fun onPlaybackStateChanged(st: Int) {
                 pv.removeCallbacks(loadRun)
                 if (st == Player.STATE_BUFFERING) { if (!errShown) pv.postDelayed(loadRun, 700) } else hideLoading()
@@ -411,8 +412,23 @@ class MainActivity : Activity() {
     // SQL LIKE pattern for the typed text; % and _ are escaped so they are searched as normal characters
     fun likeArg(q: String) = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
+    // Search's preview: the picture shrinks into a window (null = full screen again); a SurfaceView follows view transforms on Android 7+
+    fun pvBox(r: RectF?) {
+        val w = root.width.toFloat(); val h = root.height.toFloat(); if (w <= 0f || h <= 0f) return
+        val sx = if (r == null) 1f else r.width() / w; val sy = if (r == null) 1f else r.height() / h; val tx = r?.left ?: 0f; val ty = r?.top ?: 0f
+        if (pv.scaleX == sx && pv.scaleY == sy && pv.translationX == tx && pv.translationY == ty) return
+        pv.pivotX = 0f; pv.pivotY = 0f; pv.scaleX = sx; pv.scaleY = sy; pv.translationX = tx; pv.translationY = ty
+    }
+    // after watching a search result the channel list (LEFT / RIGHT) is where that channel lives: Favorites when it is one,
+    // else its own playlist, opened at its category
+    fun showListOf(c: Ch) {
+        if (c.url in favs) { favGrp = null; selectGroup(0); switchTo(c); return }
+        val i = sources.indexOfFirst { it.id == c.src }
+        if (i < 0 || i == act) { selectGroup(groups.indexOf(c.group).takeIf { it > 1 } ?: 1); return }
+        pendingGrp = c.group; activate(i, false)
+    }
     fun endSearch() {
-        searching = false; searchQ = null
+        searching = false
         selectGroup(grp, true)
     }
     // a channel picked from another playlist's search result / favorites: switch to that playlist first
@@ -422,7 +438,8 @@ class MainActivity : Activity() {
         channels = c
         groups = listOf("★ Favorites", "All") + c.map { it.group }.distinct()
         val saved = if (boot) groups.indexOf(prefs.getString("grp", "All")) else -1   // remembered category (by name: every playlist has its own)
-        selectGroup(if (saved >= 0) saved else if (keepFav && grp == 0) 0 else 1)   // switching playlist because a favorite was played: stay in Favorites
+        val pg = pendingGrp?.let { groups.indexOf(it) }?.takeIf { it > 1 }; pendingGrp = null   // a search result's own category
+        selectGroup(pg ?: if (saved >= 0) saved else if (keepFav && grp == 0) 0 else 1)   // switching playlist because a favorite was played: stay in Favorites
         val last = if (boot) c.firstOrNull { it.url == prefs.getString("last", null) } else null
         if (last != null) play(last)
         else if (ui.side) { ui.catSel = ui.catActive(); ui.plSel = ui.plActive(); ui.invalidate() }   // playlist picked in the side panels: keep them open
@@ -443,9 +460,30 @@ class MainActivity : Activity() {
                 o.inJustDecodeBounds = false; o.inSampleSize = maxOf(1, maxOf(o.outWidth, o.outHeight) / 480)   // tall posters too
                 val b = BitmapFactory.decodeFile(f.path, o)
                 if (b != null) { pics.put(u, b); ui.postInvalidate() } else picFailed.add(u)
-            } catch (e: Throwable) { picFailed.add(u) }   // Throwable: a huge guide picture (OutOfMemoryError) must not crash the app finally { picLoading.remove(u) }
+            } catch (e: Throwable) { picFailed.add(u) }   // Throwable: a huge guide picture (OutOfMemoryError) must not crash the app
+            finally { picLoading.remove(u) }
         }
         return null
+    }
+    // a still of each channel, grabbed 2 s after its picture starts (any playing, preview or full screen) and kept on disk:
+    // Search cards show it, so you see what a channel really is before opening it
+    val thumbs = object : android.util.LruCache<String, Bitmap>(12 * 1024 * 1024) { override fun sizeOf(k: String, b: Bitmap): Int = b.byteCount }
+    val thumbAsked: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+    fun thumbOf(c: Ch): Bitmap? {
+        thumbs.get(c.url)?.let { return it }
+        if (thumbAsked.add(c.url)) pool.execute {
+            try { val f = File(cacheDir, "th" + hx(c.url)); if (f.exists()) BitmapFactory.decodeFile(f.path)?.let { thumbs.put(c.url, it); thumbAsked.remove(c.url); ui.postInvalidate() } } catch (e: Throwable) {} }
+        return null
+    }
+    val grabRun = Runnable { grabThumb() }
+    fun grabThumb() {
+        val c = cur ?: return; val sv = pv.videoSurfaceView as? SurfaceView ?: return
+        if (catchupProg != null || frameUrl != c.url || errShown || android.os.Build.VERSION.SDK_INT < 24 || sv.width == 0 || player.videoSize.width == 0) return
+        val b = Bitmap.createBitmap(384, 216, Bitmap.Config.ARGB_8888)
+        try { android.view.PixelCopy.request(sv, b, { r -> if (r == android.view.PixelCopy.SUCCESS && cur?.url == c.url) {
+            thumbs.put(c.url, b); thumbAsked.remove(c.url); ui.invalidate()
+            pool.execute { try { val f = File(cacheDir, "th" + hx(c.url)); val t = File(f.path + ".t"); t.outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 80, it) }; t.renameTo(f) } catch (e: Throwable) {} } } },
+            android.os.Handler(mainLooper)) } catch (e: Exception) {}
     }
     fun logoOf(c: Ch): Bitmap? {
         if (!c.logo.startsWith("http") || c.logo in failed) return null
@@ -845,6 +883,7 @@ class MainActivity : Activity() {
     fun play(c: Ch, info: Boolean = false) = startPlay(c, c.url, null, info)
 
     fun startPlay(c: Ch, url: String, cp: Prog?, info: Boolean = false) {
+        frameUrl = null
         if (cur != null && cur != c) prev = cur
         cur = c; catchupProg = cp
         catchupSrc = if (cp != null) url else null
@@ -1037,7 +1076,7 @@ class MainActivity : Activity() {
     val numRun = Runnable { numV.visibility = View.GONE; val n = numBuf.toIntOrNull(); numBuf = ""; if (n != null) channels.firstOrNull { it.num == n }?.let { if (it != cur) play(it, true) } }   // typing the channel already on does nothing
 
     // BACK is handled here (before any view sees it): a short press goes back, holding it exits the app completely
-    var backLong = false; var okHold = false; var okLong = false
+    var backLong = false; var backFrom = 0; var okHold = false; var okLong = false
     override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
         if (sleepWarned && ev.action == KeyEvent.ACTION_DOWN) { setSleep(0); return true }
         // while watching (or on the overlay after a channel change) holding OK opens the main menu, so remotes without a Menu
@@ -1063,10 +1102,11 @@ class MainActivity : Activity() {
         }
         if (ev.keyCode == KeyEvent.KEYCODE_BACK) {
             if (ev.action == KeyEvent.ACTION_DOWN) {
-                if (ev.repeatCount == 0) backLong = false
+                if (ev.repeatCount == 0) { backLong = false; backFrom = ui.mode }
                 else if (!backLong && (ev.isLongPress || ev.repeatCount >= 5)) { backLong = true   // holding BACK: first every menu closes at once, then the pin goes, then the app exits
-                    if (ui.mode == 17 && ui.srch.q.isNotEmpty()) { ui.srch.q = ""; ui.srch.foc = 0; ui.suggest(); ui.invalidate() }   // Search: the first hold clears the words, the next one leaves
+                    if (ui.mode == 17 && ui.srch.foc == 0 && !ui.bkF && ui.srch.q.isNotEmpty()) { ui.srch.q = ""; ui.srch.acc = null; ui.suggest(); ui.invalidate() }   // Search, on the letters: holding clears the words (anywhere else it closes)
                     else if (ui.mode != 0) ui.close()
+                    else if (backFrom != 0) {}   // this hold started in a menu: closing it is all it does, never the app
                     else if (catchupProg != null && catchupBar.visibility == View.VISIBLE) catchupBar.close()
                     else if (pip.ch != null) { unpin(); flash("Unpinned: hold BACK again to exit the app", 3000) } else exitApp() }
             } else if (ev.action == KeyEvent.ACTION_UP) {
